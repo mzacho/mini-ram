@@ -29,7 +29,7 @@ fn ripple_adder<T>(b: &mut Builder<T>, xs: &[usize], ys: &[usize]) -> (usize, Ve
 
 #[cfg(test)]
 mod tests {
-    use crate::circuit::{builder::Builder, eval64, gadgets::half_adder, OP_MAX};
+    use crate::circuit::{builder::Builder, builder::Res, eval64, gadgets::half_adder, OP_MAX};
 
     use super::{full_adder, ripple_adder};
 
@@ -40,7 +40,7 @@ mod tests {
         let (x, y, z) = (1 + OP_MAX, 2 + OP_MAX, 3 + OP_MAX);
 
         let (sum, carry) = full_adder(&mut b, x, y, z);
-        let (gates, consts, n_gates, n_out) = b.build(&[sum, carry]);
+        let Res{gates, consts, n_gates, n_out} = b.build(&[sum, carry]);
         let wires = &mut vec![0; n_gates - n_out + n_in];
         // 0 + 0
         wires[0] = 0;
@@ -103,8 +103,8 @@ mod tests {
         let (x, y) = (1 + OP_MAX, 2 + OP_MAX);
 
         let (sum, carry) = half_adder(&mut b, x, y);
-        let (gates, consts, n_gates, n_outs) = b.build(&[sum, carry]);
-        let wires = &mut vec![0; n_gates - n_outs + n_in];
+        let Res{gates, consts, n_gates, n_out} = b.build(&[sum, carry]);
+        let wires = &mut vec![0; n_gates - n_out + n_in];
         // 0 + 0
         wires[0] = 0;
         wires[0] = 0;
@@ -144,8 +144,8 @@ mod tests {
         let (carry, mut sums) = ripple_adder(&mut b, xs, ys);
         assert_eq!(sums.len(), 4);
         sums.push(carry);
-        let (gates, consts, n_gates, n_outs) = b.build(&sums);
-        let wires = &mut vec![0; n_gates + n_in - n_outs];
+        let Res{gates, consts, n_gates, n_out} = b.build(&sums);
+        let wires = &mut vec![0; n_gates + n_in - n_out];
         wires[0] = 0; // x0
         wires[1] = 0; // x1
         wires[2] = 0; // x2

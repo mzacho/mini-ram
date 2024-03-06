@@ -1,4 +1,4 @@
-use std::{collections::HashMap, error::Error};
+use std::collections::HashMap;
 use strum::IntoEnumIterator;
 
 use crate::miniram::lang::*;
@@ -18,7 +18,7 @@ pub type LocalState = [Word; N_REG];
 /// Returns the result of evaluation, with all local states
 /// encountered during evaluation, or an error if the time bound t
 /// was exceeded.
-pub fn interpret(prog: Prog, args: Vec<Word>, t: usize) -> Res<(Word, Vec<LocalState>)> {
+pub fn interpret(prog: &Prog, args: Vec<Word>, t: usize) -> Res<(Word, Vec<LocalState>)> {
     let mut mem = init_mem(args);
     let mut st = init_store();
     let mut cfl = init_cflags();

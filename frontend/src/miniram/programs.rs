@@ -54,7 +54,7 @@ pub fn mul_eq() -> Prog {
 #[test]
 fn test_mul() {
     use crate::miniram::interpreter::interpret;
-    let p = mul();
+    let p = &mul();
     let args = vec![3, 4];
     let res = interpret(p, args, 42);
     assert_eq!(res.unwrap().0, 12);
@@ -63,7 +63,7 @@ fn test_mul() {
 #[test]
 fn test_mul_eq() {
     use crate::miniram::interpreter::interpret;
-    let p = mul_eq();
+    let p = &mul_eq();
     let args = vec![3, 4, 12];
     let res = interpret(p, args, 42);
     assert_eq!(res.unwrap().0, 0);

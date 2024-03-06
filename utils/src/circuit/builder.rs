@@ -25,6 +25,13 @@ pub struct Builder<T> {
     n_outs: usize,
 }
 
+pub struct Res<T> {
+    pub gates: Vec<usize>,
+    pub consts: Vec<T>,
+    pub n_gates: usize,
+    pub n_out: usize,
+}
+
 impl<T> Builder<T> {
     pub fn new(n_in: usize) -> Self {
         Self {
@@ -237,9 +244,8 @@ impl<T> Builder<T> {
         self.cursor_gates - 1
     }
 
-    // reduce
-
-    pub fn build(mut self, outputs: &[usize]) -> (Vec<usize>, Vec<T>, usize, usize) {
+    /// Reduce builder to its result
+    pub fn build(mut self, outputs: &[usize]) -> Res<T> {
         #[cfg(test)]
         self.validate();
         for x in outputs {
@@ -248,6 +254,11 @@ impl<T> Builder<T> {
             self.n_gates += 1;
             self.n_outs += 1;
         }
-        (self.gates, self.consts, self.n_gates, self.n_outs)
+        Res {
+            gates: self.gates,
+            consts: self.consts,
+            n_gates: self.n_gates,
+            n_out: self.n_outs
+        }
     }
 }

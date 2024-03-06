@@ -8,7 +8,7 @@ type EInst64 = u64;
 
 pub type EProg = Vec<EInst64>;
 
-pub fn encode(p: Prog) -> EProg {
+pub fn encode(p: &Prog) -> EProg {
     p.iter().map(|i| encode_instr(i)).collect()
 }
 
