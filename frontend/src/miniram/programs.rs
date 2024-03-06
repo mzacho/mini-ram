@@ -1,5 +1,5 @@
 use crate::miniram::builder::*;
-use crate::miniram::lang::{Reg::*, *};
+use crate::miniram::lang::{reg::*, Prog, Reg};
 
 const RES: Reg = R3;
 
@@ -21,9 +21,9 @@ fn mul_() -> Builder {
         .mov_r(RES, y)
         // loop:
         //  prepare address to jump to if i = 1
-        .mov_r(top, Reg::PC)
+        .mov_r(top, PC)
         .mov_c(bot, 5)
-        .add(bot, Reg::PC, bot)
+        .add(bot, PC, bot)
         .sub(x, x, one)
         .b_z(bot)
         .add(RES, RES, y)
@@ -33,9 +33,7 @@ fn mul_() -> Builder {
 /// Computes x * y
 /// Invariant: x > 0
 pub fn mul() -> Prog {
-    mul_()
-        .ret_r(RES)
-        .build()
+    mul_().ret_r(RES).build()
 }
 
 /// Computes x * y - z
@@ -43,7 +41,7 @@ pub fn mul() -> Prog {
 pub fn mul_eq() -> Prog {
     let z = R1;
     mul_()
-    //  fetch arg from memory
+        //  fetch arg from memory
         .mov_c(z, 2)
         .ldr(z, z)
         .sub(RES, RES, z)

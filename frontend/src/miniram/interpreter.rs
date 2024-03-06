@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use strum::IntoEnumIterator;
 
+use crate::miniram::lang::reg::*;
 use crate::miniram::lang::*;
 
 type Mem = HashMap<Word, Word>;
@@ -24,7 +25,7 @@ pub fn interpret(prog: &Prog, args: Vec<Word>, t: usize) -> Res<(Word, Vec<Local
     let mut cfl = init_cflags();
     let mut sts = Vec::new();
 
-    let pc = &Reg::PC;
+    let pc = &PC;
     let mut i = fetch(&prog, st[pc])?;
     let res = loop {
         dbg!(&st, i);
@@ -84,14 +85,17 @@ pub fn interpret(prog: &Prog, args: Vec<Word>, t: usize) -> Res<(Word, Vec<Local
         i = fetch(&prog, st[pc])?;
         sts.push(record(&st));
         if sts.len() >= t {
-            return Err("time bound exceeded")
+            return Err("time bound exceeded");
         }
     };
 
-    Ok((match res {
-        Val::Reg(r) => st[r],
-        Val::Const(c) => *c,
-    }, sts))
+    Ok((
+        match res {
+            Val::Reg(r) => st[r],
+            Val::Const(c) => *c,
+        },
+        sts,
+    ))
 }
 
 fn fetch(prog: &Prog, pc: Word) -> Res<&Inst> {
@@ -100,7 +104,7 @@ fn fetch(prog: &Prog, pc: Word) -> Res<&Inst> {
 }
 
 fn inc_pc(st: &mut Store) {
-    st.insert(Reg::PC, st[&Reg::PC] + 1);
+    st.insert(PC, st[&PC] + 1);
 }
 
 /// Add arguments to addresses 0, 1, ..., args.len() in mem
@@ -115,8 +119,8 @@ fn init_mem(args: Vec<Word>) -> Mem {
 
 fn init_store() -> Store {
     let mut st = Store::new();
-    for c in Reg::iter() {
-        st.insert(c, 0);
+    for c in 0..N_REG {
+        st.insert(u8::try_from(c).unwrap(), 0);
     }
     st
 }
@@ -132,8 +136,8 @@ fn init_cflags() -> Cflags {
 /// Records the current local state of the program execution
 fn record(st: &Store) -> LocalState {
     let mut res = [0; N_REG];
-    for (i, reg) in Reg::iter().enumerate() {
-        res[i] = st[&reg];
+    for (i, reg) in (0..N_REG).enumerate() {
+        res[i] = st[&u8::try_from(reg).unwrap()];
     }
     res
 }

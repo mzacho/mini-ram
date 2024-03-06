@@ -1,6 +1,5 @@
 use super::lang::Inst::*;
 use super::lang::*;
-use strum::IntoEnumIterator;
 
 /// encoded instruction
 /// todo: describe format
@@ -78,13 +77,9 @@ fn encode_instr_u64(opcode: u8, dst: u8, arg1: u8, arg2: u32) -> u64 {
     field1 ^ field2 ^ field3 ^ field5
 }
 
+#[inline]
 fn encode_reg(reg: &Reg) -> u8 {
-    #[rustfmt::skip]
-    let x = Reg::iter()
-        .enumerate()
-        .find(|(_, r)| *r == *reg)
-        .unwrap().0;
-    u8::try_from(x).ok().unwrap()
+    *reg
 }
 
 /// Returns encoded value and opcode offset
@@ -101,24 +96,33 @@ fn encode_val(v: &Val) -> (u32, u8) {
 #[cfg(test)]
 mod tests {
     use super::encode_instr;
+    use crate::miniram::lang::reg::*;
     use crate::miniram::lang::Inst::*;
-    use crate::miniram::lang::Reg::*;
 
     #[test]
     fn test_encode() {
         let i = ADD(R1, R1, R1);
         let enc = encode_instr(&i);
-        //                op       dst      arg0     blank    arg1
-        assert_eq!(enc, 0b00000000_00000000_00000000_00000000_00000000000000000000000000000000);
+        //          op      dst     arg0    blank                             arg1
+        assert_eq!(
+            enc,
+            0b00000000_00000001_00000001_00000000_00000000000000000000000000000001
+        );
 
         let i = ADD(R2, R1, R1);
         let enc = encode_instr(&i);
-        //                op       dst      arg0     blank    arg1
-        assert_eq!(enc, 0b00000000_00000001_00000000_00000000_00000000000000000000000000000000);
+        //          op      dst     arg0    blank                             arg1
+        assert_eq!(
+            enc,
+            0b00000000_00000010_00000001_00000000_00000000000000000000000000000001
+        );
 
         let i = SUB(R2, R2, R2);
         let enc = encode_instr(&i);
-        //                op       dst      arg0     blank    arg1
-        assert_eq!(enc, 0b00000001_00000001_00000001_00000000_00000000000000000000000000000001);
+        //          op      dst     arg0    blank                             arg1
+        assert_eq!(
+            enc,
+            0b00000001_00000010_00000010_00000000_00000000000000000000000000000010
+        );
     }
 }

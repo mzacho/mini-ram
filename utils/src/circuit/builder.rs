@@ -1,19 +1,19 @@
+use super::OP_ADD;
 use super::OP_AND;
 use super::OP_AND_CONST;
-use super::OP_ADD;
-use super::OP_CONV_A2B;
-use super::OP_CONV_B2A;
-use super::OP_SUB;
-use super::OP_MUL;
-use super::OP_MUL_CONST;
 use super::OP_CHECK_ALL_EQ_BUT_ONE;
 use super::OP_CHECK_AND;
 use super::OP_CHECK_EQ;
 use super::OP_CHECK_Z;
 use super::OP_CONST;
+use super::OP_CONV_A2B;
+use super::OP_CONV_B2A;
 use super::OP_MAX;
+use super::OP_MUL;
+use super::OP_MUL_CONST;
 use super::OP_OUT;
 use super::OP_SELECT;
+use super::OP_SUB;
 use super::OP_XOR;
 
 pub struct Builder<T> {
@@ -258,7 +258,7 @@ impl<T> Builder<T> {
             gates: self.gates,
             consts: self.consts,
             n_gates: self.n_gates,
-            n_out: self.n_outs
+            n_out: self.n_outs,
         }
     }
 }

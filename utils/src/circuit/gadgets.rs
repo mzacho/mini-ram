@@ -13,7 +13,10 @@ fn full_adder<T>(b: &mut Builder<T>, x: usize, y: usize, carry: usize) -> (usize
     (carry, sum)
 }
 
-fn ripple_adder<T>(b: &mut Builder<T>, xs: &[usize], ys: &[usize]) -> (usize, Vec<usize>) where T: Default {
+fn ripple_adder<T>(b: &mut Builder<T>, xs: &[usize], ys: &[usize]) -> (usize, Vec<usize>)
+where
+    T: Default,
+{
     assert_eq!(xs.len(), ys.len());
     assert!(!(xs.is_empty() | ys.is_empty()));
     let zero = b.push_const(T::default());
@@ -25,6 +28,10 @@ fn ripple_adder<T>(b: &mut Builder<T>, xs: &[usize], ys: &[usize]) -> (usize, Ve
         sums.push(sum)
     }
     (carry, sums)
+}
+
+fn u32_to_bits<T>(b: &mut Builder<T>, x: usize) -> [usize; 32] {
+    todo!() // maybe not needed?
 }
 
 #[cfg(test)]
@@ -40,7 +47,12 @@ mod tests {
         let (x, y, z) = (1 + OP_MAX, 2 + OP_MAX, 3 + OP_MAX);
 
         let (sum, carry) = full_adder(&mut b, x, y, z);
-        let Res{gates, consts, n_gates, n_out} = b.build(&[sum, carry]);
+        let Res {
+            gates,
+            consts,
+            n_gates,
+            n_out,
+        } = b.build(&[sum, carry]);
         let wires = &mut vec![0; n_gates - n_out + n_in];
         // 0 + 0
         wires[0] = 0;
@@ -103,7 +115,12 @@ mod tests {
         let (x, y) = (1 + OP_MAX, 2 + OP_MAX);
 
         let (sum, carry) = half_adder(&mut b, x, y);
-        let Res{gates, consts, n_gates, n_out} = b.build(&[sum, carry]);
+        let Res {
+            gates,
+            consts,
+            n_gates,
+            n_out,
+        } = b.build(&[sum, carry]);
         let wires = &mut vec![0; n_gates - n_out + n_in];
         // 0 + 0
         wires[0] = 0;
@@ -144,7 +161,12 @@ mod tests {
         let (carry, mut sums) = ripple_adder(&mut b, xs, ys);
         assert_eq!(sums.len(), 4);
         sums.push(carry);
-        let Res{gates, consts, n_gates, n_out} = b.build(&sums);
+        let Res {
+            gates,
+            consts,
+            n_gates,
+            n_out,
+        } = b.build(&sums);
         let wires = &mut vec![0; n_gates + n_in - n_out];
         wires[0] = 0; // x0
         wires[1] = 0; // x1
