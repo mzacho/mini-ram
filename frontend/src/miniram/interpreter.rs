@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, error::Error};
 use strum::IntoEnumIterator;
 
 use crate::miniram::lang::*;
@@ -8,11 +8,21 @@ type Store = HashMap<Reg, Word>;
 type Cflags = HashMap<Cond, bool>;
 
 pub type Res<T> = Result<T, &'static str>;
+/// Local state of program execution. Consists of:
+/// - Value of all registers
+/// - todo: Value of conditional flags
+pub type LocalState = [Word; N_REG];
 
-pub fn interpret(prog: Prog, args: Vec<Word>) -> Res<Word> {
+/// Executes prog on args for maximum t steps.
+///
+/// Returns the result of evaluation, with all local states
+/// encountered during evaluation, or an error if the time bound t
+/// was exceeded.
+pub fn interpret(prog: Prog, args: Vec<Word>, t: usize) -> Res<(Word, Vec<LocalState>)> {
     let mut mem = init_mem(args);
     let mut st = init_store();
     let mut cfl = init_cflags();
+    let mut sts = Vec::new();
 
     let pc = &Reg::PC;
     let mut i = fetch(&prog, st[pc])?;
@@ -72,12 +82,16 @@ pub fn interpret(prog: Prog, args: Vec<Word>) -> Res<Word> {
         };
         inc_pc(&mut st);
         i = fetch(&prog, st[pc])?;
+        sts.push(record(&st));
+        if sts.len() >= t {
+            return Err("time bound exceeded")
+        }
     };
 
-    Ok(match res {
+    Ok((match res {
         Val::Reg(r) => st[r],
         Val::Const(c) => *c,
-    })
+    }, sts))
 }
 
 fn fetch(prog: &Prog, pc: Word) -> Res<&Inst> {
@@ -113,4 +127,13 @@ fn init_cflags() -> Cflags {
         cfl.insert(f, false);
     }
     cfl
+}
+
+/// Records the current local state of the program execution
+fn record(st: &Store) -> LocalState {
+    let mut res = [0; N_REG];
+    for (i, reg) in Reg::iter().enumerate() {
+        res[i] = st[&reg];
+    }
+    res
 }

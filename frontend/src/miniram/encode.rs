@@ -9,10 +9,10 @@ type EInst64 = u64;
 pub type EProg = Vec<EInst64>;
 
 pub fn encode(p: Prog) -> EProg {
-    p.iter().map(|i| encode_(i)).collect()
+    p.iter().map(|i| encode_instr(i)).collect()
 }
 
-fn encode_(i: &Inst) -> EInst64 {
+fn encode_instr(i: &Inst) -> EInst64 {
     match i {
         ADD(x, y, z) => {
             let opcode = 0;
@@ -95,5 +95,30 @@ fn encode_val(v: &Val) -> (u32, u8) {
             (u32::from(r), 0)
         }
         Val::Const(c) => (*c, 1),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::encode_instr;
+    use crate::miniram::lang::Inst::*;
+    use crate::miniram::lang::Reg::*;
+
+    #[test]
+    fn test_encode() {
+        let i = ADD(R1, R1, R1);
+        let enc = encode_instr(&i);
+        //                op       dst      arg0     blank    arg1
+        assert_eq!(enc, 0b00000000_00000000_00000000_00000000_00000000000000000000000000000000);
+
+        let i = ADD(R2, R1, R1);
+        let enc = encode_instr(&i);
+        //                op       dst      arg0     blank    arg1
+        assert_eq!(enc, 0b00000000_00000001_00000000_00000000_00000000000000000000000000000000);
+
+        let i = SUB(R2, R2, R2);
+        let enc = encode_instr(&i);
+        //                op       dst      arg0     blank    arg1
+        assert_eq!(enc, 0b00000001_00000001_00000001_00000000_00000000000000000000000000000001);
     }
 }

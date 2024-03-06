@@ -9,6 +9,8 @@ use strum_macros::EnumIter;
 
 pub type Word = u32;
 
+pub const N_REG: usize = 17;
+
 #[derive(Debug, Eq, PartialEq, Hash, EnumIter, Clone, Copy)]
 pub enum Reg {
     R1,
