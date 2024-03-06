@@ -13,16 +13,18 @@ const OP_MUL: usize = 5;
 const OP_MUL_CONST: usize = 6;
 const OP_SELECT: usize = 7;
 // - binary and arithmetic
-const OP_CONST: usize = 8;
-const OP_OUT: usize = 9;
+const OP_CONV_B2A: usize = 8;
+const OP_CONV_A2B: usize = 9;
+const OP_CONST: usize = 10;
+const OP_OUT: usize = 11;
 // Operations for verification:
-const OP_CHECK_Z: usize = 10;
-const OP_CHECK_EQ: usize = 11;
-const OP_CHECK_AND: usize = 12;
-const OP_CHECK_ALL_EQ_BUT_ONE: usize = 13;
+const OP_CHECK_Z: usize = 12;
+const OP_CHECK_EQ: usize = 13;
+const OP_CHECK_AND: usize = 14;
+const OP_CHECK_ALL_EQ_BUT_ONE: usize = 15;
 
 // arg0 is OP_MAX+1
-const OP_MAX: usize = 13;
+const OP_MAX: usize = 15;
 
 type Gates = [usize];
 type W64<'a> = &'a mut [u64];
@@ -112,6 +114,21 @@ pub fn eval64(gates: &Gates, wires: W64, n_gates: usize, n_in: usize, consts: C6
                 }
             }
             // --- mixed ops
+            OP_CONV_A2B => {
+                // assert x in Z_{2^64} is a bit
+                let x = wires[arg - OP_MAX - 1];
+                assert!(x < 2);
+                // move result
+                res = x;
+                i += 1;
+            }
+            OP_CONV_B2A => {
+                // assert x in Z_{2^64} is a bit
+                let x = wires[arg - OP_MAX - 1];
+                // move result
+                res = x;
+                i += 1;
+            }
             OP_CONST => {
                 res = consts[arg - OP_MAX - 1];
                 i += 1;
@@ -165,7 +182,7 @@ pub fn count_outs(gates: &Gates) -> usize {
 mod tests {
     use super::*;
     #[test]
-    fn eval_binary_add() {
+    fn eval_xor() {
         let x = OP_MAX + 1;
         let y = OP_MAX + 2;
         let gates = &[OP_XOR, x, y];
@@ -179,7 +196,7 @@ mod tests {
     }
 
     #[test]
-    fn eval_binary_add_2() {
+    fn eval_add() {
         let x = OP_MAX + 1;
         let y = OP_MAX + 2;
         // (x + y) + x
@@ -194,7 +211,7 @@ mod tests {
     }
 
     #[test]
-    fn eval_variadic_add() {
+    fn eval_add_variadic() {
         let x = OP_MAX + 1;
         let y = OP_MAX + 2;
         let z = OP_MAX + 3;
@@ -210,7 +227,7 @@ mod tests {
     }
 
     #[test]
-    fn eval_mul_simple() {
+    fn eval_mul() {
         let x = OP_MAX + 1;
         let y = OP_MAX + 2;
         // ((x * y) + x) * y

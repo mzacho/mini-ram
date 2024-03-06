@@ -1,6 +1,8 @@
 use super::OP_AND;
 use super::OP_AND_CONST;
 use super::OP_ADD;
+use super::OP_CONV_A2B;
+use super::OP_CONV_B2A;
 use super::OP_SUB;
 use super::OP_MUL;
 use super::OP_MUL_CONST;
@@ -133,7 +135,6 @@ impl<T> Builder<T> {
         self.cursor_gates - 1
     }
 
-
     pub fn select(&mut self, i: usize, ids: &[usize]) -> usize {
         #[cfg(test)]
         self.validate();
@@ -162,6 +163,26 @@ impl<T> Builder<T> {
         self.validate();
         self.gates.push(OP_CONST);
         self.gates.push(c);
+        self.n_gates += 1;
+        self.cursor_gates += 1;
+        self.cursor_gates - 1
+    }
+
+    pub fn conv_b2a(&mut self, x: usize) -> usize {
+        #[cfg(test)]
+        self.validate();
+        self.gates.push(OP_CONV_B2A);
+        self.gates.push(x);
+        self.n_gates += 1;
+        self.cursor_gates += 1;
+        self.cursor_gates - 1
+    }
+
+    pub fn conv_a2b(&mut self, x: usize) -> usize {
+        #[cfg(test)]
+        self.validate();
+        self.gates.push(OP_CONV_A2B);
+        self.gates.push(x);
         self.n_gates += 1;
         self.cursor_gates += 1;
         self.cursor_gates - 1
