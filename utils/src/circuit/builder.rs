@@ -1,5 +1,9 @@
 use super::OP_AND;
 use super::OP_AND_CONST;
+use super::OP_ADD;
+use super::OP_SUB;
+use super::OP_MUL;
+use super::OP_MUL_CONST;
 use super::OP_CHECK_ALL_EQ_BUT_ONE;
 use super::OP_CHECK_AND;
 use super::OP_CHECK_EQ;
@@ -37,6 +41,8 @@ impl<T> Builder<T> {
         assert_eq!(super::count_outs(&self.gates), self.n_outs);
     }
 
+    // --- binary ops
+
     pub fn xor(&mut self, ids: &[usize]) -> usize {
         #[cfg(test)]
         self.validate();
@@ -60,6 +66,17 @@ impl<T> Builder<T> {
         self.cursor_gates - 1
     }
 
+    pub fn and_const(&mut self, c: usize, x: usize) -> usize {
+        #[cfg(test)]
+        self.validate();
+        self.gates.push(OP_AND_CONST);
+        self.gates.push(c);
+        self.gates.push(x);
+        self.n_gates += 1;
+        self.cursor_gates += 1;
+        self.cursor_gates - 1
+    }
+
     // convenience
     pub fn or(&mut self, x: usize, y: usize) -> usize {
         #[cfg(test)]
@@ -68,6 +85,69 @@ impl<T> Builder<T> {
         let and = self.and(x, y);
         self.xor(&[xor, and])
     }
+
+    // --- arithmetic ops
+
+    pub fn add(&mut self, ids: &[usize]) -> usize {
+        #[cfg(test)]
+        self.validate();
+        self.gates.push(OP_ADD);
+        for id in ids {
+            self.gates.push(*id);
+        }
+        self.n_gates += 1;
+        self.cursor_gates += 1;
+        self.cursor_gates - 1
+    }
+
+    pub fn sub(&mut self, x: usize, y: usize) -> usize {
+        #[cfg(test)]
+        self.validate();
+        self.gates.push(OP_SUB);
+        self.gates.push(x);
+        self.gates.push(y);
+        self.n_gates += 1;
+        self.cursor_gates += 1;
+        self.cursor_gates - 1
+    }
+
+    pub fn mul(&mut self, x: usize, y: usize) -> usize {
+        #[cfg(test)]
+        self.validate();
+        self.gates.push(OP_MUL);
+        self.gates.push(x);
+        self.gates.push(y);
+        self.n_gates += 1;
+        self.cursor_gates += 1;
+        self.cursor_gates - 1
+    }
+
+    pub fn mul_const(&mut self, c: usize, x: usize) -> usize {
+        #[cfg(test)]
+        self.validate();
+        self.gates.push(OP_MUL_CONST);
+        self.gates.push(c);
+        self.gates.push(x);
+        self.n_gates += 1;
+        self.cursor_gates += 1;
+        self.cursor_gates - 1
+    }
+
+
+    pub fn select(&mut self, i: usize, ids: &[usize]) -> usize {
+        #[cfg(test)]
+        self.validate();
+        self.gates.push(OP_SELECT);
+        self.gates.push(i);
+        for id in ids {
+            self.gates.push(*id);
+        }
+        self.n_gates += 1;
+        self.cursor_gates += 1;
+        self.cursor_gates - 1
+    }
+
+    // --- mixed ops
 
     pub fn push_const(&mut self, c: T) -> usize {
         #[cfg(test)]
@@ -87,29 +167,7 @@ impl<T> Builder<T> {
         self.cursor_gates - 1
     }
 
-    pub fn and_const(&mut self, c: usize, x: usize) -> usize {
-        #[cfg(test)]
-        self.validate();
-        self.gates.push(OP_AND_CONST);
-        self.gates.push(c);
-        self.gates.push(x);
-        self.n_gates += 1;
-        self.cursor_gates += 1;
-        self.cursor_gates - 1
-    }
-
-    pub fn select(&mut self, i: usize, ids: &[usize]) -> usize {
-        #[cfg(test)]
-        self.validate();
-        self.gates.push(OP_SELECT);
-        self.gates.push(i);
-        for id in ids {
-            self.gates.push(*id);
-        }
-        self.n_gates += 1;
-        self.cursor_gates += 1;
-        self.cursor_gates - 1
-    }
+    // --- zk verification ops
 
     pub fn check_z(&mut self, x: usize) -> usize {
         #[cfg(test)]
@@ -157,6 +215,8 @@ impl<T> Builder<T> {
         self.cursor_gates += 1;
         self.cursor_gates - 1
     }
+
+    // reduce
 
     pub fn build(mut self, outputs: &[usize]) -> (Vec<usize>, Vec<T>, usize, usize) {
         #[cfg(test)]
