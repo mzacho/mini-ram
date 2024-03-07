@@ -24,11 +24,12 @@ pub mod reg {
     pub const R4: Reg = 4;
     pub const R5: Reg = 5;
     pub const R6: Reg = 6;
-    pub const R7: Reg = 7;
-    pub const R8: Reg = 8;
-    pub const R9: Reg = 9;
+    // pub const R7: Reg = 7;
+    // pub const R8: Reg = 8;
+    // pub const R9: Reg = 9;
 }
 
+#[allow(dead_code)]
 #[derive(Debug)]
 pub enum Inst {
     // Bitwise operations

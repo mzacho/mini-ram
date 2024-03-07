@@ -1,19 +1,19 @@
 use super::builder::Builder;
 
-fn half_adder<T>(b: &mut Builder<T>, x: usize, y: usize) -> (usize, usize) {
+pub fn half_adder<T>(b: &mut Builder<T>, x: usize, y: usize) -> (usize, usize) {
     let sum = b.xor(&[x, y]);
     let carry = b.and(x, y);
     (carry, sum)
 }
 
-fn full_adder<T>(b: &mut Builder<T>, x: usize, y: usize, carry: usize) -> (usize, usize) {
+pub fn full_adder<T>(b: &mut Builder<T>, x: usize, y: usize, carry: usize) -> (usize, usize) {
     let (carry1, sum) = half_adder(b, x, y);
     let (carry2, sum) = half_adder(b, sum, carry);
     let carry = b.or(carry1, carry2);
     (carry, sum)
 }
 
-fn ripple_adder<T>(b: &mut Builder<T>, xs: &[usize], ys: &[usize]) -> (usize, Vec<usize>)
+pub fn ripple_adder<T>(b: &mut Builder<T>, xs: &[usize], ys: &[usize]) -> (usize, Vec<usize>)
 where
     T: Default,
 {
@@ -30,15 +30,17 @@ where
     (carry, sums)
 }
 
-fn u32_to_bits<T>(b: &mut Builder<T>, x: usize) -> [usize; 32] {
-    todo!() // maybe not needed?
-}
+// pub fn u32_to_bits<T>(b: &mut Builder<T>, x: usize) -> [usize; 32] {
+//     todo!() // maybe not needed?
+// }
 
 #[cfg(test)]
 mod tests {
-    use crate::circuit::{builder::Builder, builder::Res, eval64, gadgets::half_adder, OP_MAX};
+    use crate::circuit::builder::{Builder, Res};
+    use crate::circuit::eval64;
+    use crate::circuit::OP_MAX;
 
-    use super::{full_adder, ripple_adder};
+    use super::{full_adder, half_adder, ripple_adder};
 
     #[test]
     fn test_full_adder() {
@@ -47,64 +49,48 @@ mod tests {
         let (x, y, z) = (1 + OP_MAX, 2 + OP_MAX, 3 + OP_MAX);
 
         let (sum, carry) = full_adder(&mut b, x, y, z);
-        let Res {
-            gates,
-            consts,
-            n_gates,
-            n_out,
-        } = b.build(&[sum, carry]);
-        let wires = &mut vec![0; n_gates - n_out + n_in];
+        let c = &b.build(&[sum, carry]);
+
         // 0 + 0
-        wires[0] = 0;
-        wires[0] = 0;
-        let res = eval64(&gates, wires, n_gates, n_in, &consts);
+        let wires = vec![0, 0, 0];
+        let res = eval64(c, wires);
         assert_eq!(res, [0, 0]);
 
         // 0 + 1
-        wires[0] = 0;
-        wires[1] = 1;
-        let res = eval64(&gates, wires, n_gates, n_in, &consts);
+        let wires = vec![0, 1, 0];
+        let res = eval64(c, wires);
         assert_eq!(res, [0, 1]);
 
         // 1 + 0
-        wires[0] = 1;
-        wires[1] = 0;
-        let res = eval64(&gates, wires, n_gates, n_in, &consts);
+        let wires = vec![1, 0, 0];
+        let res = eval64(c, wires);
         assert_eq!(res, [0, 1]);
 
         // 1 + 1
-        wires[0] = 1;
-        wires[1] = 1;
-        let res = eval64(&gates, wires, n_gates, n_in, &consts);
+        let wires = vec![1, 1, 0];
+        let res = eval64(c, wires);
         assert_eq!(res, [1, 0]);
 
-        let wires = &mut vec![0; n_gates - n_out + n_in];
         // set carry to 1
-        wires[2] = 1;
 
         // 0 + 0
-        wires[0] = 0;
-        wires[1] = 0;
-        let res = eval64(&gates, wires, n_gates, n_in, &consts);
+        let wires = vec![0, 0, 1];
+        let res = eval64(c, wires);
         assert_eq!(res, [0, 1]);
 
         // 0 + 1
-        wires[0] = 0;
-        wires[1] = 1;
-        let res = eval64(&gates, wires, n_gates, n_in, &consts);
-
+        let wires = vec![0, 1, 1];
+        let res = eval64(c, wires);
         assert_eq!(res, [1, 0]);
 
         // 1 + 0
-        wires[0] = 1;
-        wires[1] = 0;
-        let res = eval64(&gates, wires, n_gates, n_in, &consts);
+        let wires = vec![1, 0, 1];
+        let res = eval64(c, wires);
         assert_eq!(res, [1, 0]);
 
         // 1 + 1
-        wires[0] = 1;
-        wires[1] = 1;
-        let res = eval64(&gates, wires, n_gates, n_in, &consts);
+        let wires = vec![1, 1, 1];
+        let res = eval64(c, wires);
         assert_eq!(res, [1, 1]);
     }
 
@@ -115,36 +101,25 @@ mod tests {
         let (x, y) = (1 + OP_MAX, 2 + OP_MAX);
 
         let (sum, carry) = half_adder(&mut b, x, y);
-        let Res {
-            gates,
-            consts,
-            n_gates,
-            n_out,
-        } = b.build(&[sum, carry]);
-        let wires = &mut vec![0; n_gates - n_out + n_in];
+        let c = &b.build(&[sum, carry]);
         // 0 + 0
-        wires[0] = 0;
-        wires[0] = 0;
-        let res = eval64(&gates, wires, n_gates, n_in, &consts);
+        let wires = vec![0, 0];
+        let res = eval64(c, wires);
         assert_eq!(res, [0, 0]);
 
         // 0 + 1
-        //         let wires = &mut vec![0; n_gates - n_outs ++ 2];
-        wires[0] = 0;
-        wires[1] = 1;
-        let res = eval64(&gates, wires, n_gates, n_in, &consts);
+        let wires = vec![0, 1];
+        let res = eval64(c, wires);
         assert_eq!(res, [0, 1]);
 
         // 1 + 0
-        wires[0] = 1;
-        wires[1] = 0;
-        let res = eval64(&gates, wires, n_gates, n_in, &consts);
+        let wires = vec![1, 0];
+        let res = eval64(c, wires);
         assert_eq!(res, [0, 1]);
 
         // 1 + 1
-        wires[0] = 1;
-        wires[1] = 1;
-        let res = eval64(&gates, wires, n_gates, n_in, &consts);
+        let wires = vec![1, 1];
+        let res = eval64(c, wires);
         assert_eq!(res, [1, 0]);
     }
 
@@ -161,13 +136,8 @@ mod tests {
         let (carry, mut sums) = ripple_adder(&mut b, xs, ys);
         assert_eq!(sums.len(), 4);
         sums.push(carry);
-        let Res {
-            gates,
-            consts,
-            n_gates,
-            n_out,
-        } = b.build(&sums);
-        let wires = &mut vec![0; n_gates + n_in - n_out];
+        let c = &b.build(&sums);
+        let mut wires = vec![0; n_in];
         wires[0] = 0; // x0
         wires[1] = 0; // x1
         wires[2] = 0; // x2
@@ -177,9 +147,10 @@ mod tests {
         wires[6] = 0; // y2
         wires[7] = 0; // y3
 
-        let res = eval64(&gates, wires, n_gates, n_in, &consts);
+        let res = eval64(c, wires);
         assert_eq!(res, [0, 0, 0, 0, 0]);
 
+        let mut wires = vec![0; n_in];
         // 0101 + 0011 = 1000 w no carry
         wires[0] = 1; //  x0 1
         wires[1] = 0; // x1 0
@@ -191,11 +162,12 @@ mod tests {
         wires[6] = 0; // y2 0
         wires[7] = 0; // y3 0
 
-        let res = eval64(&gates, wires, n_gates, n_in, &consts);
+        let res = eval64(c, wires);
 
         //                 z0    z1    z2     z3    carry
         assert_eq!(res, [0, 0, 0, 1, 0]);
 
+        let mut wires = vec![0; n_in];
         // 1101 + 1110 = 1011 w carry
         wires[0] = 1; //  x0 1
         wires[1] = 0; // x1 0
@@ -207,7 +179,7 @@ mod tests {
         wires[6] = 1; // y2 1
         wires[7] = 1; // y3 1
 
-        let res = eval64(&gates, wires, n_gates, n_in, &consts);
+        let res = eval64(c, wires);
 
         //                 z0    z1    z2     z3    carry
         assert_eq!(res, [1, 1, 0, 1, 1]);

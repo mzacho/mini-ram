@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use crate::miniram::interpreter::*;
 use crate::miniram::lang::reg::*;
 use crate::miniram::lang::*;
@@ -13,7 +11,7 @@ use super::encode::encode;
 ///
 /// The witness consists of the local state of program execution,
 /// i.e a Vec<LocalState> that is as long as the time bound t
-fn encode_witness(prog: &Prog, args: Vec<Word>, t: usize) -> Res<Vec<LocalState>> {
+pub fn encode_witness(prog: &Prog, args: Vec<Word>, t: usize) -> Res<Vec<u64>> {
     let (res, mut lsts) = interpret(prog, args, t)?;
     assert_eq!(res, 0);
     if lsts.len() < t {
@@ -23,7 +21,11 @@ fn encode_witness(prog: &Prog, args: Vec<Word>, t: usize) -> Res<Vec<LocalState>
             lsts.push(last_st);
         }
     }
-    Ok(lsts)
+    Ok(convert_localstates(lsts))
+}
+
+fn convert_localstates(lsts: Vec<LocalState>) -> Vec<u64> {
+    lsts.iter().flatten().map(|v| u64::from(*v)).collect()
 }
 
 /// Generates a circuit for verifying the existence of an input
@@ -34,7 +36,7 @@ fn encode_witness(prog: &Prog, args: Vec<Word>, t: usize) -> Res<Vec<LocalState>
 ///
 /// todo: currently the program is hardcoded into the circuit as a
 /// constant.
-fn generate_circuit(prog: &Prog, t: usize) -> builder::Res<u64> {
+pub fn generate_circuit(prog: &Prog, t: usize) -> builder::Res<u64> {
     let n_in = t * N_REG;
     let mut b = builder::Builder::new(n_in);
     let mut outputs = vec![];
@@ -75,17 +77,13 @@ fn transition_circuit(b: &mut builder::Builder<u64>, i: usize, code: &[usize]) -
     todo!()
 }
 
-fn convert_localstates(lsts: Vec<LocalState>) -> Vec<u64> {
-    lsts.iter().flatten().map(|v| u64::from(*v)).collect()
-}
-
 #[cfg(test)]
 mod test {
     use utils::circuit::eval64;
 
     use crate::miniram::programs::mul_eq;
 
-    use super::{convert_localstates, encode_witness, generate_circuit};
+    use super::{encode_witness, generate_circuit};
 
     #[test]
     fn test_encode_witness() {
@@ -105,12 +103,11 @@ mod test {
     fn test_convert_and_eval_mul_eq() {
         let t = 20;
         let p = &mul_eq();
-        let c = generate_circuit(p, t);
+        let c = &generate_circuit(p, t);
         let args = vec![2, 2, 4];
-        let lsts = encode_witness(p, args, 20).unwrap();
-        let mut w = convert_localstates(lsts);
-        let n_in = w.len();
-        let res = eval64(&c.gates, &mut w, c.n_gates, n_in, &c.consts);
+        let w = encode_witness(p, args, 20).unwrap();
+
+        let res = eval64(c, w);
 
         for v in res {
             assert_eq!(v, 0)
