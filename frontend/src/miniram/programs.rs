@@ -32,6 +32,7 @@ fn mul_() -> Builder {
 
 /// Computes x * y
 /// Invariant: x > 0
+#[cfg(test)]
 pub fn mul() -> Prog {
     mul_().ret_r(RES).build()
 }
@@ -49,20 +50,64 @@ pub fn mul_eq() -> Prog {
         .build()
 }
 
-#[test]
-fn test_mul() {
-    use crate::miniram::interpreter::interpret;
-    let p = &mul();
-    let args = vec![3, 4];
-    let res = interpret(p, args, 42);
-    assert_eq!(res.unwrap().0, 12);
+/// RET 0
+#[cfg(test)]
+pub fn const_0() -> Prog {
+    Builder::new().ret_c(0).build()
+}
+
+/// MOV r2, 0; RET r2
+#[cfg(test)]
+pub fn mov0_ret() -> Prog {
+    Builder::new().mov_c(2, 0).ret_r(2).build()
+}
+
+/// MOV r2, 42; RET r2
+#[cfg(test)]
+pub fn mov42_ret() -> Prog {
+    Builder::new().mov_c(2, 42).ret_r(2).build()
+}
+
+/// MOV r2, 2
+/// MOV r3, 2
+/// SUB r2, r2, r3
+/// RET r2
+#[cfg(test)]
+pub fn mov_mov_sub_ret() -> Prog {
+    Builder::new()
+        .mov_c(2, 0)
+        .mov_c(3, 0)
+        .sub(2, 2, 3)
+        .ret_r(2)
+        .build()
 }
 
 #[test]
+#[cfg(test)]
+fn test_mul() {
+    use crate::miniram::interpreter::interpret;
+    let time_bound = 10000;
+    let p = &mul();
+    let args = vec![3, 4];
+    let res = interpret(p, args, time_bound);
+    assert_eq!(res.unwrap().0, 12);
+
+    let args = vec![132, 45];
+    let res = interpret(p, args, time_bound);
+    assert_eq!(res.unwrap().0, 132 * 45);
+}
+
+#[test]
+#[cfg(test)]
 fn test_mul_eq() {
     use crate::miniram::interpreter::interpret;
+    let time_bound = 1000;
     let p = &mul_eq();
     let args = vec![3, 4, 12];
-    let res = interpret(p, args, 42);
+    let res = interpret(p, args, time_bound);
+    assert_eq!(res.unwrap().0, 0);
+
+    let args = vec![31, 65, 31 * 65];
+    let res = interpret(p, args, time_bound);
     assert_eq!(res.unwrap().0, 0);
 }

@@ -22,8 +22,12 @@ use crate::miniram::programs;
 use crate::miniram::reduction::encode_witness;
 use crate::miniram::reduction::generate_circuit;
 
-const PROGRAM_DESC: &'static str = "VOLE-based ZK proof of correct MiniRAM executions";
-const PROGRAM_NAME: &'static str = "miniram-zk";
+const PROGRAM_DESC: &str = "VOLE-based ZK proof of correct MiniRAM executions";
+const PROGRAM_NAME: &str = "miniram-zk";
+
+pub struct ProofCtx {
+    //rng: dyn Rng
+}
 
 /// Options:
 ///  -p, --party:
@@ -44,54 +48,55 @@ fn main() {
             circuit,
         }) => {
             println!("Successfully parsed args");
-            //            println!("party={party}, port={port}, port_vole={port_vole}, prog={prog}, t={t}");
-            let (c, w) = if let Some(prog) = prog {
-                if let Some(t) = t {
-                    match prog.as_str() {
-                        "mul_eq" => {
-                            let prog = programs::mul_eq();
-                            let args = vec![2, 2, 4];
-                            let w = encode_witness(&prog, args, t).unwrap(); // todo: handle
-                            let c = generate_circuit(&prog, t);
-                            (c, w)
-                        }
-                        _ => {
-                            println!("don't understand: {}", prog);
-                            exit(1);
-                        }
-                    }
-                } else {
-                    println!("err: found prog but no time-bound");
-                    exit(1);
-                }
-            } else {
-                if let Some(circuit) = circuit {
-                    match circuit.as_str() {
-                        "mul_eq" => {
-                            let c = circuits::mul_eq();
-                            let w = vec![2, 2, 4];
-                            (c, w)
-                        }
-                        _ => {
-                            println!("don't understand: {}", circuit);
-                            exit(1);
-                        }
-                    }
-                } else {
-                    println!("err: no prog or circuit");
-                    exit(1);
-                }
-            };
+            let ctx = ProofCtx {};
             match party.as_str() {
-                "prover" => run_p(port, port_vole, c, w),
-                "verifier" => run_v(port, port_vole, c),
-                "vole" => run_vole(port_vole),
+                "prover" | "verifier" => {
+                    assert!(port_vole.is_some());
+                    let (c, w) = if prog.is_some() & t.is_some() {
+                        let prog = prog.unwrap();
+                        let t = t.unwrap();
+                        match prog.as_str() {
+                            "mul_eq" => {
+                                let prog = programs::mul_eq();
+                                let args = vec![2, 2, 4];
+                                let w = encode_witness(&prog, args, t).unwrap(); // todo: handle
+                                let c = generate_circuit(&prog, t);
+                                (c, w)
+                            }
+                            _ => {
+                                println!("don't understand: {}", prog);
+                                exit(1);
+                            }
+                        }
+                    } else if let Some(circuit) = circuit {
+                        match circuit.as_str() {
+                            "mul_eq" => {
+                                let c = circuits::mul_eq();
+                                let w = vec![2, 2, 4];
+                                (c, w)
+                            }
+                            _ => {
+                                println!("don't understand: {}", circuit);
+                                exit(1);
+                            }
+                        }
+                    } else {
+                        println!("err: no prog and time-bound or curcuit ");
+                        exit(1);
+                    };
+                    match party.as_ref() {
+                        "prover" => run_p(port, port_vole.unwrap(), c, w, ctx),
+                        "verifier" => run_v(port, port_vole.unwrap(), c, ctx),
+                        _ => panic!("unreachable"),
+                    }
+                }
+                "vole" => run_vole(port, ctx),
                 _ => {
                     println!("don't understand: {}", party);
                     exit(1);
                 }
             }
-            .ok()
+            .unwrap();
         }
         Err(error) => {
             println!("{}", error);
@@ -103,7 +108,7 @@ fn main() {
 struct ParseRes {
     party: String,
     port: u16,
-    port_vole: u16,
+    port_vole: Option<u16>,
     prog: Option<String>,
     t: Option<usize>,
     circuit: Option<String>,
@@ -134,7 +139,7 @@ fn parse(input: std::env::Args) -> Result<ParseRes, ArgsError> {
         "vole-port",
         "Port of the trusted VOLE dealer running on the localhost",
         "VOLE_PORT",
-        Occur::Req,
+        Occur::Optional,
         None,
     );
 
@@ -169,7 +174,7 @@ fn parse(input: std::env::Args) -> Result<ParseRes, ArgsError> {
 
     let party = args.value_of("party").unwrap();
     let port = args.value_of("port").unwrap();
-    let port_vole = args.value_of("vole-port").unwrap();
+    let port_vole = args.optional_value_of("vole-port").unwrap();
 
     let prog = args.optional_value_of("prog").unwrap();
     let t = args.optional_value_of("time-bound").unwrap();

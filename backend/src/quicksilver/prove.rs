@@ -1,26 +1,23 @@
 use utils::channel::*;
 use utils::circuit::builder::Res as Circuit;
 
-pub fn prove64<T>(c: Circuit<u64>, w: Vec<u64>, channel: T)
-where
-    T: ZKChannel<u64>,
-{
+pub fn prove64(c: Circuit<u64>, w: Vec<u64>, mut chan: ProverTcpChannel) {
     let n_in = w.len();
+    let n_mul = c.n_mul;
     let n_gates = c.n_gates;
     let gates = c.gates;
     let consts = c.consts;
 
-    let _ = n_in;
-    let _ = n_gates;
-    let _ = gates;
-    let _ = consts;
-    let _ = channel;
+    let vole_size = n_in + n_mul + 1; // + 2 * q;
 
-    // let input = U64Circuit {
-    //     gates: &c.gates,
-    //     consts: &c.consts,
-    //     n_gates: c.n_gates,
-    //     n_in: w.len(),
-    // };
-    todo!()
+    let (xs, macs) = preprocess_vole(&mut chan, vole_size);
+
+    //todo!()
+}
+
+fn preprocess_vole(chan: &mut ProverTcpChannel, n: usize) -> (Vec<u64>, Vec<u64>) {
+    let vole_size = u64::try_from(n).unwrap();
+
+    chan.send_extend_vole_zm(vole_size);
+    chan.recv_extend_vole_zm(vole_size)
 }

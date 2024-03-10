@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 utils = { path = "../utils" }
 backend = { path = "../backend" }
+rand = "0.8.5"
 strum = "0.26"
 strum_macros = "0.26"
 getopts = "0.2"

@@ -36,20 +36,20 @@ pub enum Inst {
     // AND(Reg, Reg, Reg),
     // OR(Reg, Reg, Reg),
     // Integer operations
-    ADD(Reg, Reg, Reg),
-    SUB(Reg, Reg, Reg),
+    Add(Reg, Reg, Reg),
+    Sub(Reg, Reg, Reg),
     // Move
-    MOV(Reg, Val),
+    Mov(Reg, Val),
     // Memory access
-    LDR(Reg, Reg),
-    STR(Reg, Reg),
+    Ldr(Reg, Reg),
+    Str(Reg, Reg),
     // Branching (unconditional and conditional)
     B(Option<Cond>, Reg),
     // Halting
-    RET(Val),
+    Ret(Val),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum Val {
     // Value in register
     Reg(Reg),
@@ -57,7 +57,7 @@ pub enum Val {
     Const(Word),
 }
 
-#[derive(Debug, Eq, PartialEq, Hash, EnumIter)]
+#[derive(Debug, Eq, PartialEq, Hash, EnumIter, Clone, Copy)]
 pub enum Cond {
     // Set when arithmetic intr. resulted in zero
     Z,

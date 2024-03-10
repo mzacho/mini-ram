@@ -16,6 +16,9 @@ pub const OP_SELECT: usize = 7;
 // - binary and arithmetic
 pub const OP_CONV_B2A: usize = 8;
 pub const OP_CONV_A2B: usize = 9;
+pub const OP_DECODE64: usize = 16;
+pub const OP_ENCODE8: usize = 17;
+pub const OP_ENCODE32: usize = 18;
 pub const OP_CONST: usize = 10;
 pub const OP_OUT: usize = 11;
 // Operations for verification:
@@ -24,8 +27,10 @@ pub const OP_CHECK_EQ: usize = 13;
 pub const OP_CHECK_AND: usize = 14;
 pub const OP_CHECK_ALL_EQ_BUT_ONE: usize = 15;
 
-// arg0 is OP_MAX+1
-pub const OP_MAX: usize = 15;
+/// Index of the first argument
+pub const ARG0: usize = 19;
+
+use std::u64::MAX;
 
 use builder::Res as Circuit;
 
@@ -38,90 +43,135 @@ use builder::Res as Circuit;
 
 /// Evaluate a circuit of u64 values
 pub fn eval64(c: &Circuit<u64>, mut wires: Vec<u64>) -> Vec<u64> {
+    dbg!(&c.gates);
+    dbg!(&c.consts);
     let gates = &c.gates;
     let consts = &c.consts;
     let n_gates = c.n_gates;
     #[cfg(test)]
-    assert_eq!(n_gates, count_ops(&gates));
+    assert_eq!(n_gates, count_ops(gates));
     let mut out = Vec::new();
     let mut i = 0;
     for _ in 0..n_gates {
         let op = gates[i];
-        let mut arg = gates[i + 1];
-        i = i + 1;
+        i += 1;
         let mut res = 0;
         dbg!(&op);
         match op {
             // --- binary ops
             OP_XOR => {
-                while arg > OP_MAX {
-                    res ^= wires[arg - OP_MAX - 1];
+                // args: idx1, idx2, ..., idxn
+                // outw: x1 xor x2 xor ... xn
+                while gates[i] >= ARG0 {
+                    res ^= wires[gates[i] - ARG0];
                     i += 1;
                     if i >= gates.len() {
+                        // this gate was the last one
                         break;
                     }
-                    arg = gates[i];
                 }
             }
             OP_AND => {
-                let lhs = wires[arg - OP_MAX - 1];
-                let rhs = wires[gates[i + 1] - OP_MAX - 1];
+                // args: idx, idy
+                // outw: x and y
+                let lhs = wires[gates[i] - ARG0];
+                let rhs = wires[gates[i + 1] - ARG0];
                 res = lhs & rhs;
                 i += 2;
             }
             OP_AND_CONST => {
-                let c = consts[arg - OP_MAX - 1];
-                let arg = gates[i + 1];
-                res = c & wires[arg - OP_MAX - 1];
+                // args: idc, idx
+                // outw: x and c
+                let c = consts[gates[i] - ARG0];
+                let x = wires[gates[i + 1] - ARG0];
+                res = c & x;
                 i += 2;
             }
             // --- arithmetic ops
             OP_ADD => {
-                while arg > OP_MAX {
-                    res += wires[arg - OP_MAX - 1];
+                // args: idx1, idx2, ..., idxn
+                // outw: x1 + x2 + ... xn
+                while gates[i] >= ARG0 {
+                    res += wires[gates[i] - ARG0];
                     i += 1;
                     if i >= gates.len() {
                         break;
                     }
-                    arg = gates[i];
                 }
             }
             OP_SUB => {
-                let lhs = wires[arg - OP_MAX - 1];
-                let rhs = wires[gates[i + 1] - OP_MAX - 1];
+                // args: idx, idy
+                // outw: x - y
+                let lhs = wires[gates[i] - ARG0];
+                let rhs = wires[gates[i + 1] - ARG0];
                 res = lhs - rhs;
                 i += 2;
             }
             OP_MUL => {
-                let lhs = wires[arg - OP_MAX - 1];
-                let rhs = wires[gates[i + 1] - OP_MAX - 1];
+                // args: idx, idy
+                // outw: x * y
+                let lhs = wires[gates[i] - ARG0];
+                let rhs = wires[gates[i + 1] - ARG0];
                 res = lhs * rhs;
                 i += 2;
             }
             OP_MUL_CONST => {
-                let c = consts[arg - OP_MAX - 1];
-                let arg = gates[i + 1];
-                res = c * wires[arg - OP_MAX - 1];
+                // args: idc, idx
+                // outw: c * x
+                let c = consts[gates[i] - ARG0];
+                let x = wires[gates[i + 1] - ARG0];
+                res = c * x;
                 i += 2;
             }
             OP_SELECT => {
-                let idx = wires[arg - OP_MAX - 1];
-                let idx: usize = idx.try_into().ok().unwrap();
-                i += idx + 1;
-                arg = gates[i];
-                res = wires[arg - OP_MAX - 1];
-                while arg > OP_MAX {
+                // args: idi, idx1, idx2, ..., idxn where i <= n
+                // outw: xi
+                let i_ = wires[gates[i] - ARG0];
+                let i_: usize = i_.try_into().ok().unwrap();
+                i += i_ + 1;
+                res = wires[gates[i] - ARG0];
+                while gates[i] >= ARG0 {
                     i += 1;
                     if i >= gates.len() {
                         break;
                     }
-                    arg = gates[i];
                 }
             }
+            OP_DECODE64 => {
+                // args: x where x < 2^64
+                // outw: idx1, idx2, ..., idxn s.t sum 2^{i-1}*xi
+                let mut x = wires[gates[i] - ARG0];
+                for _ in 1..64 {
+                    res = u64::from(x.trailing_ones() > 0);
+                    wires.push(res);
+                    x >>= 1;
+                }
+                res = u64::from(x.trailing_ones() > 0);
+                i += 1;
+            }
+            OP_ENCODE8 => {
+                // args: idx1, idx2, ..., idx8
+                // outw: sum 2^{i-1}*xi
+                for k in 0..8 {
+                    let xk = wires[gates[i] - ARG0];
+                    res += 2u64.pow(k) * xk;
+                    i += 1;
+                }
+            }
+            OP_ENCODE32 => {
+                // args: idx1, idx2, ..., idx32
+                // outw: sum 2^{i-1}*xi
+                for k in 0..32 {
+                    let xk = wires[gates[i] - ARG0];
+                    res += 2u64.pow(k) * xk;
+                    i += 1;
+                }
+            }
+
             // --- mixed ops
             OP_CONV_A2B => {
                 // assert x in Z_{2^64} is a bit
-                let x = wires[arg - OP_MAX - 1];
+                let x = wires[gates[i] - ARG0];
                 assert!(x < 2);
                 // move result
                 res = x;
@@ -129,28 +179,55 @@ pub fn eval64(c: &Circuit<u64>, mut wires: Vec<u64>) -> Vec<u64> {
             }
             OP_CONV_B2A => {
                 // assert x in Z_{2^64} is a bit
-                let x = wires[arg - OP_MAX - 1];
+                let x = wires[gates[i] - ARG0];
                 // move result
                 res = x;
                 i += 1;
             }
             OP_CONST => {
-                res = consts[arg - OP_MAX - 1];
+                // args: idc
+                // outw: c
+                dbg!(i);
+                dbg!(gates[i]);
+                res = consts[gates[i] - ARG0];
                 i += 1;
             }
             OP_OUT => {
-                dbg!(wires[arg - OP_MAX - 1]);
-                out.push(wires[arg - OP_MAX - 1]);
+                // args: idx
+                // outw: none
+                // out: x
+                out.push(wires[gates[i] - ARG0]);
                 i += 1;
             }
-            // --- zk verificatin ops
-            OP_CHECK_Z => (),              // noop
-            OP_CHECK_EQ => (),             // noop
-            OP_CHECK_AND => (),            // noop
-            OP_CHECK_ALL_EQ_BUT_ONE => (), // noop
+            // --- verificatin ops
+            //  if check fails, adds 1 to output
+            //  if check succeeds, adds 0 to output
+            OP_CHECK_Z => (),   // noop
+            OP_CHECK_EQ => (),  // noop
+            OP_CHECK_AND => (), // noop
+            OP_CHECK_ALL_EQ_BUT_ONE => {
+                // args: idi, idx1, idy1, idx2, idy2,..., idxn, idyn
+                // asserts: xj = yj for j != i
+                let mut res_ = true;
+                let mut i_ = wires[gates[i] - ARG0];
+                i += 1;
+                while gates[i] > ARG0 {
+                    if i_ == 0 {
+                        i += 2;
+                        i_ = MAX;
+                        continue;
+                    }
+                    let x = wires[gates[i] - ARG0];
+                    let y = wires[gates[i + 1] - ARG0];
+                    res_ &= x == y;
+                    i += 2;
+                    i_ -= 1;
+                }
+                assert!(res_)
+            }
             _ => panic!("invalid operation"),
         }
-        if op != OP_OUT {
+        if (op != OP_OUT) & !is_check(op) {
             dbg!(res);
             // wires[j - out.len() + n_in] = res;
             wires.push(res);
@@ -165,7 +242,7 @@ pub fn eval64(c: &Circuit<u64>, mut wires: Vec<u64>) -> Vec<u64> {
 fn count_ops(gates: &[usize]) -> usize {
     let mut res = 0;
     for i in gates {
-        if *i <= OP_MAX {
+        if *i < ARG0 {
             res += 1;
         }
     }
@@ -174,7 +251,7 @@ fn count_ops(gates: &[usize]) -> usize {
 
 #[cfg(test)]
 /// Counts number of output gates
-pub fn count_outs(gates: &[usize]) -> usize {
+pub fn count_out(gates: &[usize]) -> usize {
     let mut res = 0;
     for i in gates {
         if *i == OP_OUT {
@@ -185,12 +262,33 @@ pub fn count_outs(gates: &[usize]) -> usize {
 }
 
 #[cfg(test)]
+/// Counts number of mul or and gates
+pub fn count_mul(gates: &[usize]) -> usize {
+    let mut res = 0;
+    for i in gates {
+        if (*i == OP_MUL) | (*i == OP_AND) {
+            res += 1;
+        }
+    }
+    res
+}
+
+pub fn is_check(op: usize) -> bool {
+    matches!(
+        op,
+        OP_CHECK_Z | OP_CHECK_EQ | OP_CHECK_AND | OP_CHECK_ALL_EQ_BUT_ONE
+    )
+}
+
+#[cfg(test)]
 mod tests {
+    use self::builder::Builder;
+
     use super::*;
     #[test]
     fn eval_xor() {
-        let x = OP_MAX + 1;
-        let y = OP_MAX + 2;
+        let x = ARG0;
+        let y = ARG0 + 1;
         let gates = vec![OP_XOR, x, y, OP_OUT, y + 1];
         let n_gates = 2;
         let consts = vec![];
@@ -200,7 +298,9 @@ mod tests {
             gates,
             consts,
             n_gates,
+            n_in: wires.len(),
             n_out: 1,
+            n_mul: 0,
         };
         let res = eval64(c, wires);
         assert_eq!(*res.last().unwrap(), 42)
@@ -208,8 +308,8 @@ mod tests {
 
     #[test]
     fn eval_add() {
-        let x = OP_MAX + 1;
-        let y = OP_MAX + 2;
+        let x = ARG0;
+        let y = ARG0 + 1;
         // (x + y) + x
         let gates = vec![OP_ADD, x, y, OP_ADD, x, y + 1, OP_OUT, y + 2];
         let n_gates = 3;
@@ -220,10 +320,39 @@ mod tests {
             gates,
             consts,
             n_gates,
+            n_in: wires.len(),
             n_out: 1,
+            n_mul: 0,
         };
         let res = eval64(c, wires);
         assert_eq!(*res.last().unwrap(), 42 + 34)
+    }
+
+    #[test]
+    fn eval_decode() {
+        // in: n, x where x < 2^32
+        // out: x1 xor x2 xor ... xor x32
+        let x = ARG0;
+        let mut b = Builder::new(1);
+        let x1 = b.decode64(x);
+        let out = b.xor(&(x1..x1 + 32).collect::<Vec<usize>>());
+        let c = &b.build(&[out]);
+
+        let wires = vec![0b1001010];
+        let res = eval64(c, wires);
+        assert_eq!(*res.last().unwrap(), 1);
+
+        let wires = vec![0b0];
+        let res = eval64(c, wires);
+        assert_eq!(*res.last().unwrap(), 0);
+
+        let wires = vec![0b010];
+        let res = eval64(c, wires);
+        assert_eq!(*res.last().unwrap(), 1);
+
+        let wires = vec![0b010101];
+        let res = eval64(c, wires);
+        assert_eq!(*res.last().unwrap(), 1);
     }
 
     // #[test]
@@ -241,7 +370,7 @@ mod tests {
     //     let c = U64Circuit {
     //         gates,
     //         consts,
-    //         n_gates,
+    //         n_gates, n_in: wires.len(),
     //         n_in,
     //     };
     //     eval64(c, wires);
@@ -262,7 +391,7 @@ mod tests {
     //     let c = U64Circuit {
     //         gates,
     //         consts,
-    //         n_gates,
+    //         n_gates, n_in: wires.len(),
     //         n_in,
     //     };
     //     eval64(c, wires);
@@ -283,7 +412,7 @@ mod tests {
     //     let c = U64Circuit {
     //         gates,
     //         consts,
-    //         n_gates,
+    //         n_gates, n_in: wires.len(),
     //         n_in,
     //     };
     //     eval64(c, wires);
@@ -305,7 +434,7 @@ mod tests {
     //     let c = U64Circuit {
     //         gates,
     //         consts,
-    //         n_gates,
+    //         n_gates, n_in: wires.len(),
     //         n_in,
     //     };
     //     eval64(c, wires);
@@ -315,7 +444,7 @@ mod tests {
     //     let c = U64Circuit {
     //         gates,
     //         consts,
-    //         n_gates,
+    //         n_gates, n_in: wires.len(),
     //         n_in,
     //     };
     //     eval64(c, wires);
@@ -358,7 +487,7 @@ mod tests {
     //         U64Circuit {
     //             gates,
     //             consts,
-    //             n_gates,
+    //             n_gates, n_in: wires.len(),
     //             n_in,
     //         },
     //         wires,
@@ -370,7 +499,7 @@ mod tests {
     //         U64Circuit {
     //             gates,
     //             consts,
-    //             n_gates,
+    //             n_gates, n_in: wires.len(),
     //             n_in,
     //         },
     //         wires,
@@ -382,7 +511,7 @@ mod tests {
     //         U64Circuit {
     //             gates,
     //             consts,
-    //             n_gates,
+    //             n_gates, n_in: wires.len(),
     //             n_in,
     //         },
     //         wires,
@@ -394,7 +523,7 @@ mod tests {
     //         U64Circuit {
     //             gates,
     //             consts,
-    //             n_gates,
+    //             n_gates, n_in: wires.len(),
     //             n_in,
     //         },
     //         wires,
@@ -407,7 +536,7 @@ mod tests {
     //         U64Circuit {
     //             gates,
     //             consts,
-    //             n_gates,
+    //             n_gates, n_in: wires.len(),
     //             n_in,
     //         },
     //         wires,
@@ -419,7 +548,7 @@ mod tests {
     //         U64Circuit {
     //             gates,
     //             consts,
-    //             n_gates,
+    //             n_gates, n_in: wires.len(),
     //             n_in,
     //         },
     //         wires,
@@ -431,7 +560,7 @@ mod tests {
     //         U64Circuit {
     //             gates,
     //             consts,
-    //             n_gates,
+    //             n_gates, n_in: wires.len(),
     //             n_in,
     //         },
     //         wires,
@@ -443,7 +572,7 @@ mod tests {
     //         U64Circuit {
     //             gates,
     //             consts,
-    //             n_gates,
+    //             n_gates, n_in: wires.len(),
     //             n_in,
     //         },
     //         wires,

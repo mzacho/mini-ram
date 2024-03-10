@@ -30,15 +30,30 @@ where
     (carry, sums)
 }
 
-// pub fn u32_to_bits<T>(b: &mut Builder<T>, x: usize) -> [usize; 32] {
-//     todo!() // maybe not needed?
-// }
+/// Decodes instr as encoded by frontend::miniram::encode::encode_instr_u64
+///
+/// Input: i, the first word of the instruction.
+///
+/// Assumes that the (two) words of each instruction are layed out
+/// in consecutive constants in the circuit.
+///
+/// Returns op, dst, arg0, arg1
+pub fn decode_instr64(b: &mut Builder<u64>, i: usize) -> (usize, usize, usize, usize) {
+    // Destruct instruction into its bit-decomposition
+    let i1 = b.decode64(i);
+
+    let op = b.encode8(i1 + 56);
+    let dst = b.encode8(i1 + 48);
+    let arg0 = b.encode8(i1 + 40);
+    let arg1 = i + 1;
+    (op, dst, arg0, arg1)
+}
 
 #[cfg(test)]
 mod tests {
-    use crate::circuit::builder::{Builder, Res};
+    use crate::circuit::builder::Builder;
     use crate::circuit::eval64;
-    use crate::circuit::OP_MAX;
+    use crate::circuit::ARG0;
 
     use super::{full_adder, half_adder, ripple_adder};
 
@@ -46,7 +61,7 @@ mod tests {
     fn test_full_adder() {
         let n_in = 3;
         let mut b = Builder::new(n_in);
-        let (x, y, z) = (1 + OP_MAX, 2 + OP_MAX, 3 + OP_MAX);
+        let (x, y, z) = (ARG0, 1 + ARG0, 2 + ARG0);
 
         let (sum, carry) = full_adder(&mut b, x, y, z);
         let c = &b.build(&[sum, carry]);
@@ -98,7 +113,7 @@ mod tests {
     fn test_half_adder() {
         let n_in = 2;
         let mut b: Builder<u64> = Builder::new(n_in);
-        let (x, y) = (1 + OP_MAX, 2 + OP_MAX);
+        let (x, y) = (ARG0, 1 + ARG0);
 
         let (sum, carry) = half_adder(&mut b, x, y);
         let c = &b.build(&[sum, carry]);
@@ -129,7 +144,7 @@ mod tests {
         let mut b = Builder::new(n_in);
         b.validate();
 
-        let xs: Vec<usize> = (1..9).map(|x| x + OP_MAX).collect();
+        let xs: Vec<usize> = (0..8).map(|x| x + ARG0).collect();
         let ys = &xs[4..];
         let xs = &xs[0..4];
 

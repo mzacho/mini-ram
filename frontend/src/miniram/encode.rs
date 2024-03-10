@@ -1,3 +1,5 @@
+use self::reg::{PC, R1};
+
 use super::lang::Inst::*;
 use super::lang::*;
 
@@ -8,40 +10,40 @@ type EInst64 = u64;
 pub type EProg = Vec<EInst64>;
 
 pub fn encode(p: &Prog) -> EProg {
-    p.iter().map(|i| encode_instr(i)).collect()
+    p.iter().map(encode_instr).collect()
 }
 
 fn encode_instr(i: &Inst) -> EInst64 {
     match i {
-        ADD(x, y, z) => {
+        Add(x, y, z) => {
             let opcode = 0;
             let dst = encode_reg(x);
             let arg1 = encode_reg(y);
             let arg2 = u32::from(encode_reg(z));
             encode_instr_u64(opcode, dst, arg1, arg2)
         }
-        SUB(x, y, z) => {
+        Sub(x, y, z) => {
             let opcode = 1;
             let dst = encode_reg(x);
             let arg1 = encode_reg(y);
             let arg2 = u32::from(encode_reg(z));
             encode_instr_u64(opcode, dst, arg1, arg2)
         }
-        MOV(x, y) => {
+        Mov(x, y) => {
             let opcode = 2;
             let dst = encode_reg(x);
             let arg1 = 0;
             let (arg2, op_offset) = encode_val(y);
             encode_instr_u64(opcode + op_offset, dst, arg1, arg2)
         }
-        LDR(x, y) => {
+        Ldr(x, y) => {
             let opcode = 4;
             let dst = encode_reg(x);
             let arg1 = encode_reg(y);
             let arg2 = 0;
             encode_instr_u64(opcode, dst, arg1, arg2)
         }
-        STR(x, y) => {
+        Str(x, y) => {
             let opcode = 5;
             let dst = encode_reg(x);
             let arg1 = encode_reg(y);
@@ -53,14 +55,14 @@ fn encode_instr(i: &Inst) -> EInst64 {
                 None => 6,
                 Some(Cond::Z) => 7,
             };
-            let dst = 0;
+            let dst = PC;
             let arg1 = 0;
             let arg2 = u32::from(encode_reg(y));
             encode_instr_u64(opcode, dst, arg1, arg2)
         }
-        RET(x) => {
+        Ret(x) => {
             let opcode = 8;
-            let dst = 0;
+            let dst = R1; // machine returns in R1
             let arg1 = 0;
             let (arg2, op_offset) = encode_val(x);
             encode_instr_u64(opcode + op_offset, dst, arg1, arg2)
@@ -101,28 +103,28 @@ mod tests {
 
     #[test]
     fn test_encode() {
-        let i = ADD(R1, R1, R1);
+        let i = Add(R1, R1, R1);
         let enc = encode_instr(&i);
         //          op      dst     arg0    blank                             arg1
         assert_eq!(
             enc,
-            0b00000000_00000001_00000001_00000000_00000000000000000000000000000001
+            0b0000_0000_0000_0001_0000_0001_0000_0000_0000_0000_0000_0000_0000_0000_0000_0001
         );
 
-        let i = ADD(R2, R1, R1);
+        let i = Add(R2, R1, R1);
         let enc = encode_instr(&i);
         //          op      dst     arg0    blank                             arg1
         assert_eq!(
             enc,
-            0b00000000_00000010_00000001_00000000_00000000000000000000000000000001
+            0b0000_0000_0000_0010_0000_0001_0000_0000_0000_0000_0000_0000_0000_0000_0000_0001
         );
 
-        let i = SUB(R2, R2, R2);
+        let i = Sub(R2, R2, R2);
         let enc = encode_instr(&i);
         //          op      dst     arg0    blank                             arg1
         assert_eq!(
             enc,
-            0b00000001_00000010_00000010_00000000_00000000000000000000000000000010
+            0b0000_0001_0000_0010_0000_0010_0000_0000_0000_0000_0000_0000_0000_0000_0000_0010
         );
     }
 }

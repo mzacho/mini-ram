@@ -1,3 +1,4 @@
+use super::ARG0;
 use super::OP_ADD;
 use super::OP_AND;
 use super::OP_AND_CONST;
@@ -8,7 +9,8 @@ use super::OP_CHECK_Z;
 use super::OP_CONST;
 use super::OP_CONV_A2B;
 use super::OP_CONV_B2A;
-use super::OP_MAX;
+use super::OP_DECODE64;
+use super::OP_ENCODE8;
 use super::OP_MUL;
 use super::OP_MUL_CONST;
 use super::OP_OUT;
@@ -19,16 +21,21 @@ use super::OP_XOR;
 pub struct Builder<T> {
     gates: Vec<usize>,
     consts: Vec<T>,
-    cursor_gates: usize,
+    cursor_wires: usize,
     cursor_consts: usize,
     n_gates: usize,
-    n_outs: usize,
+    n_in: usize,
+    n_mul: usize,
+    n_out: usize,
+    offset_arg0: bool,
 }
 
 pub struct Res<T> {
     pub gates: Vec<usize>,
     pub consts: Vec<T>,
     pub n_gates: usize,
+    pub n_in: usize,
+    pub n_mul: usize,
     pub n_out: usize,
 }
 
@@ -37,17 +44,21 @@ impl<T> Builder<T> {
         Self {
             gates: Vec::new(),
             consts: Vec::new(),
-            cursor_gates: n_in + OP_MAX + 1,
-            cursor_consts: OP_MAX + 1,
+            cursor_wires: n_in + ARG0,
+            cursor_consts: ARG0,
             n_gates: 0,
-            n_outs: 0,
+            n_in,
+            n_mul: 0,
+            n_out: 0,
+            offset_arg0: false,
         }
     }
 
     #[cfg(test)]
     pub fn validate(&self) {
         assert_eq!(super::count_ops(&self.gates), self.n_gates);
-        assert_eq!(super::count_outs(&self.gates), self.n_outs);
+        assert_eq!(super::count_out(&self.gates), self.n_out);
+        assert_eq!(super::count_mul(&self.gates), self.n_mul);
     }
 
     // --- binary ops
@@ -60,8 +71,8 @@ impl<T> Builder<T> {
             self.gates.push(*id);
         }
         self.n_gates += 1;
-        self.cursor_gates += 1;
-        self.cursor_gates - 1
+        self.cursor_wires += 1;
+        self.cursor_wires - 1
     }
 
     pub fn and(&mut self, x: usize, y: usize) -> usize {
@@ -71,8 +82,9 @@ impl<T> Builder<T> {
         self.gates.push(x);
         self.gates.push(y);
         self.n_gates += 1;
-        self.cursor_gates += 1;
-        self.cursor_gates - 1
+        self.n_mul += 1;
+        self.cursor_wires += 1;
+        self.cursor_wires - 1
     }
 
     pub fn and_const(&mut self, c: usize, x: usize) -> usize {
@@ -82,8 +94,8 @@ impl<T> Builder<T> {
         self.gates.push(c);
         self.gates.push(x);
         self.n_gates += 1;
-        self.cursor_gates += 1;
-        self.cursor_gates - 1
+        self.cursor_wires += 1;
+        self.cursor_wires - 1
     }
 
     // convenience
@@ -105,8 +117,8 @@ impl<T> Builder<T> {
             self.gates.push(*id);
         }
         self.n_gates += 1;
-        self.cursor_gates += 1;
-        self.cursor_gates - 1
+        self.cursor_wires += 1;
+        self.cursor_wires - 1
     }
 
     pub fn sub(&mut self, x: usize, y: usize) -> usize {
@@ -116,8 +128,8 @@ impl<T> Builder<T> {
         self.gates.push(x);
         self.gates.push(y);
         self.n_gates += 1;
-        self.cursor_gates += 1;
-        self.cursor_gates - 1
+        self.cursor_wires += 1;
+        self.cursor_wires - 1
     }
 
     pub fn mul(&mut self, x: usize, y: usize) -> usize {
@@ -127,8 +139,9 @@ impl<T> Builder<T> {
         self.gates.push(x);
         self.gates.push(y);
         self.n_gates += 1;
-        self.cursor_gates += 1;
-        self.cursor_gates - 1
+        self.n_mul += 1;
+        self.cursor_wires += 1;
+        self.cursor_wires - 1
     }
 
     pub fn mul_const(&mut self, c: usize, x: usize) -> usize {
@@ -138,8 +151,8 @@ impl<T> Builder<T> {
         self.gates.push(c);
         self.gates.push(x);
         self.n_gates += 1;
-        self.cursor_gates += 1;
-        self.cursor_gates - 1
+        self.cursor_wires += 1;
+        self.cursor_wires - 1
     }
 
     pub fn select(&mut self, i: usize, ids: &[usize]) -> usize {
@@ -151,8 +164,68 @@ impl<T> Builder<T> {
             self.gates.push(*id);
         }
         self.n_gates += 1;
-        self.cursor_gates += 1;
-        self.cursor_gates - 1
+        self.cursor_wires += 1;
+        self.cursor_wires - 1
+    }
+
+    pub fn select_range(
+        &mut self,
+        mut i: usize,
+        mut from: usize,
+        mut to: usize,
+        step: usize,
+    ) -> usize {
+        #[cfg(test)]
+        self.validate();
+        if self.offset_arg0 {
+            i += ARG0;
+            from += ARG0;
+            to += ARG0;
+            self.offset_arg0 = false;
+        }
+
+        self.gates.push(OP_SELECT);
+        self.gates.push(i);
+        for id in (from..to).step_by(step) {
+            self.gates.push(id);
+        }
+        self.n_gates += 1;
+        self.cursor_wires += 1;
+        self.cursor_wires - 1
+    }
+
+    pub fn decode64(&mut self, x: usize) -> usize {
+        #[cfg(test)]
+        self.validate();
+        self.gates.push(OP_DECODE64);
+        self.gates.push(x);
+        self.n_gates += 1;
+        self.cursor_wires += 64;
+        self.cursor_wires - 64
+    }
+
+    pub fn encode8(&mut self, x1: usize) -> usize {
+        #[cfg(test)]
+        self.validate();
+        self.gates.push(OP_ENCODE8);
+        for id in x1..x1 + 8 {
+            self.gates.push(id);
+        }
+        self.n_gates += 1;
+        self.cursor_wires += 1;
+        self.cursor_wires - 1
+    }
+
+    pub fn encode32(&mut self, x1: usize) -> usize {
+        #[cfg(test)]
+        self.validate();
+        self.gates.push(OP_ENCODE8);
+        for id in x1..x1 + 8 {
+            self.gates.push(id);
+        }
+        self.n_gates += 1;
+        self.cursor_wires += 1;
+        self.cursor_wires - 1
     }
 
     // --- mixed ops
@@ -171,8 +244,8 @@ impl<T> Builder<T> {
         self.gates.push(OP_CONST);
         self.gates.push(c);
         self.n_gates += 1;
-        self.cursor_gates += 1;
-        self.cursor_gates - 1
+        self.cursor_wires += 1;
+        self.cursor_wires - 1
     }
 
     pub fn conv_b2a(&mut self, x: usize) -> usize {
@@ -181,8 +254,8 @@ impl<T> Builder<T> {
         self.gates.push(OP_CONV_B2A);
         self.gates.push(x);
         self.n_gates += 1;
-        self.cursor_gates += 1;
-        self.cursor_gates - 1
+        self.cursor_wires += 1;
+        self.cursor_wires - 1
     }
 
     pub fn conv_a2b(&mut self, x: usize) -> usize {
@@ -191,34 +264,30 @@ impl<T> Builder<T> {
         self.gates.push(OP_CONV_A2B);
         self.gates.push(x);
         self.n_gates += 1;
-        self.cursor_gates += 1;
-        self.cursor_gates - 1
+        self.cursor_wires += 1;
+        self.cursor_wires - 1
     }
 
     // --- zk verification ops
 
-    pub fn check_z(&mut self, x: usize) -> usize {
+    pub fn check_z(&mut self, x: usize) {
         #[cfg(test)]
         self.validate();
         self.gates.push(OP_CHECK_Z);
         self.gates.push(x);
         self.n_gates += 1;
-        self.cursor_gates += 1;
-        self.cursor_gates - 1
     }
 
-    pub fn check_eq(&mut self, x: usize, y: usize) -> usize {
+    pub fn check_eq(&mut self, x: usize, y: usize) {
         #[cfg(test)]
         self.validate();
         self.gates.push(OP_CHECK_EQ);
         self.gates.push(x);
         self.gates.push(y);
         self.n_gates += 1;
-        self.cursor_gates += 1;
-        self.cursor_gates - 1
     }
 
-    pub fn check_and(&mut self, x: usize, y: usize, z: usize) -> usize {
+    pub fn check_and(&mut self, x: usize, y: usize, z: usize) {
         #[cfg(test)]
         self.validate();
         self.gates.push(OP_CHECK_AND);
@@ -226,11 +295,9 @@ impl<T> Builder<T> {
         self.gates.push(y);
         self.gates.push(z);
         self.n_gates += 1;
-        self.cursor_gates += 1;
-        self.cursor_gates - 1
     }
 
-    pub fn check_all_eq_but_one(&mut self, i: usize, ids: &[(usize, usize)]) -> usize {
+    pub fn check_all_eq_but_one(&mut self, i: usize, ids: &[(usize, usize)]) {
         #[cfg(test)]
         self.validate();
         self.gates.push(OP_CHECK_ALL_EQ_BUT_ONE);
@@ -240,8 +307,13 @@ impl<T> Builder<T> {
             self.gates.push(*y);
         }
         self.n_gates += 1;
-        self.cursor_gates += 1;
-        self.cursor_gates - 1
+    }
+
+    /// Put builder into state where all ids are offset by ARG0, but
+    /// only for next instruction. (and currently only for
+    /// select_range)
+    pub fn offset_arg0(&mut self) {
+        self.offset_arg0 = true
     }
 
     /// Reduce builder to its result
@@ -252,13 +324,15 @@ impl<T> Builder<T> {
             self.gates.push(OP_OUT);
             self.gates.push(*x);
             self.n_gates += 1;
-            self.n_outs += 1;
+            self.n_out += 1;
         }
         Res {
             gates: self.gates,
             consts: self.consts,
             n_gates: self.n_gates,
-            n_out: self.n_outs,
+            n_out: self.n_out,
+            n_in: self.n_in,
+            n_mul: self.n_mul,
         }
     }
 }

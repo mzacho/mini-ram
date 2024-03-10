@@ -1,12 +1,13 @@
 use super::builder::Builder;
 use super::builder::Res as Circuit;
+use super::ARG0;
 
 /// Construct a circuit that computes x * y - z
 pub fn mul_eq() -> Circuit<u64> {
     let n_in = 3;
-    let x = 0;
-    let y = 1;
-    let z = 2;
+    let x = ARG0;
+    let y = ARG0 + 1;
+    let z = ARG0 + 2;
     let mut b = Builder::new(n_in);
     let mul = b.mul(x, y);
     let sub = b.sub(mul, z);
@@ -18,6 +19,7 @@ mod test {
     use super::*;
     use crate::circuit::eval64;
 
+    #[test]
     fn test_mul_eq() {
         let c = &mul_eq();
         let w = vec![2, 2, 4];
