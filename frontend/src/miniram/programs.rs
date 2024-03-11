@@ -31,14 +31,14 @@ fn mul_() -> Builder {
 }
 
 /// Computes x * y
-/// Invariant: x > 0
+/// Precondition: x > 0
 #[cfg(test)]
 pub fn mul() -> Prog {
     mul_().ret_r(RES).build()
 }
 
 /// Computes x * y - z
-/// Invariant: x > 0, x * y > z
+/// Precondition: x > 0
 pub fn mul_eq() -> Prog {
     let z = R1;
     mul_()
@@ -111,6 +111,22 @@ pub fn b_skip() -> Prog {
     Builder::new()
         .mov_c(2, 3)
         .b(2)
+        .mov_c(3, 42)
+        .ret_c(0)
+        .build()
+}
+
+/// MOV r2, 4
+/// MOV r4, 0      <-- sets Z
+/// B Z r2         <-- skips next instr
+/// MOV r3, 42
+/// RET 0
+#[cfg(test)]
+pub fn b_z_skip() -> Prog {
+    Builder::new()
+        .mov_c(2, 4)
+        .mov_c(4, 0)
+        .b_z(2)
         .mov_c(3, 42)
         .ret_c(0)
         .build()

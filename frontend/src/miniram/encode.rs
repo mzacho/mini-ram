@@ -57,6 +57,7 @@ fn encode_instr(i: &Inst) -> EInst64 {
             };
             let dst = PC;
             let arg0 = 0;
+            // todo: use arg0 instead, so arg1 can hold an offset
             let arg1 = u32::from(encode_reg(y));
             encode_instr_u64(opcode, dst, arg0, arg1)
         }

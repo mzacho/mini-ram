@@ -27,7 +27,7 @@ pub fn interpret(prog: &Prog, args: Vec<Word>, t: usize) -> Res<(Word, Vec<Local
     let pc = usize::from(PC);
     let mut i = fetch(prog, st[pc])?;
     let res = loop {
-        dbg!(&st, i);
+        dbg!(&st, &cfl, i);
         match *i {
             // Inst::AND(dst, x, y) => {
             //     let v = st[x] ^ st[y];
@@ -119,7 +119,7 @@ pub fn interpret(prog: &Prog, args: Vec<Word>, t: usize) -> Res<(Word, Vec<Local
         }
     };
 
-    dbg!(&st);
+    dbg!(&st, &cfl);
     Ok((res, sts))
 }
 
