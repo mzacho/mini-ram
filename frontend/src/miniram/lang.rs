@@ -1,4 +1,5 @@
-use strum_macros::EnumIter;
+use strum::EnumCount;
+use strum_macros::{EnumCount, EnumIter};
 
 /// MiniRAM - a TinyRAM inspired language for efficient verification
 /// of Zero-Knowledge arguments, intended to be targetet by a
@@ -13,6 +14,8 @@ pub type Reg = u8;
 
 // Registers are PC, R1, ..., R15
 pub const N_REG: usize = 16;
+// Condition flags are Z
+pub const N_CFL: usize = Cond::COUNT;
 
 pub mod reg {
     use super::Reg;
@@ -57,7 +60,7 @@ pub enum Val {
     Const(Word),
 }
 
-#[derive(Debug, Eq, PartialEq, Hash, EnumIter, Clone, Copy)]
+#[derive(Debug, Eq, PartialEq, Hash, EnumIter, Clone, Copy, EnumCount)]
 pub enum Cond {
     // Set when arithmetic intr. resulted in zero
     Z,

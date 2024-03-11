@@ -9,12 +9,16 @@ use super::OP_CHECK_Z;
 use super::OP_CONST;
 use super::OP_CONV_A2B;
 use super::OP_CONV_B2A;
+use super::OP_DECODE32;
 use super::OP_DECODE64;
+use super::OP_ENCODE32;
+use super::OP_ENCODE4;
 use super::OP_ENCODE8;
 use super::OP_MUL;
 use super::OP_MUL_CONST;
 use super::OP_OUT;
 use super::OP_SELECT;
+use super::OP_SELECT_CONST;
 use super::OP_SUB;
 use super::OP_XOR;
 
@@ -168,13 +172,25 @@ impl<T> Builder<T> {
         self.cursor_wires - 1
     }
 
-    pub fn select_range(
+    pub fn select_range(&mut self, i: usize, from: usize, to: usize, step: usize) -> usize {
+        self.select_range_(i, from, to, step, OP_SELECT)
+    }
+
+    pub fn select_const_range(&mut self, i: usize, from: usize, to: usize, step: usize) -> usize {
+        self.select_range_(i, from, to, step, OP_SELECT_CONST)
+    }
+
+    pub fn select_range_(
         &mut self,
         mut i: usize,
         mut from: usize,
         mut to: usize,
         step: usize,
+        op: usize,
     ) -> usize {
+        if !matches!(op, OP_SELECT | OP_SELECT_CONST) {
+            panic!("invalid select op")
+        }
         #[cfg(test)]
         self.validate();
         if self.offset_arg0 {
@@ -184,7 +200,7 @@ impl<T> Builder<T> {
             self.offset_arg0 = false;
         }
 
-        self.gates.push(OP_SELECT);
+        self.gates.push(op);
         self.gates.push(i);
         for id in (from..to).step_by(step) {
             self.gates.push(id);
@@ -192,6 +208,16 @@ impl<T> Builder<T> {
         self.n_gates += 1;
         self.cursor_wires += 1;
         self.cursor_wires - 1
+    }
+
+    pub fn decode32(&mut self, x: usize) -> usize {
+        #[cfg(test)]
+        self.validate();
+        self.gates.push(OP_DECODE32);
+        self.gates.push(x);
+        self.n_gates += 1;
+        self.cursor_wires += 32;
+        self.cursor_wires - 32
     }
 
     pub fn decode64(&mut self, x: usize) -> usize {
@@ -216,11 +242,23 @@ impl<T> Builder<T> {
         self.cursor_wires - 1
     }
 
+    pub fn encode4(&mut self, x1: usize) -> usize {
+        #[cfg(test)]
+        self.validate();
+        self.gates.push(OP_ENCODE4);
+        for id in x1..x1 + 4 {
+            self.gates.push(id);
+        }
+        self.n_gates += 1;
+        self.cursor_wires += 1;
+        self.cursor_wires - 1
+    }
+
     pub fn encode32(&mut self, x1: usize) -> usize {
         #[cfg(test)]
         self.validate();
-        self.gates.push(OP_ENCODE8);
-        for id in x1..x1 + 8 {
+        self.gates.push(OP_ENCODE32);
+        for id in x1..x1 + 32 {
             self.gates.push(id);
         }
         self.n_gates += 1;
@@ -314,6 +352,13 @@ impl<T> Builder<T> {
     /// select_range)
     pub fn offset_arg0(&mut self) {
         self.offset_arg0 = true
+    }
+
+    pub fn debug(&mut self) {
+        use super::OP_DEBUG;
+
+        self.gates.push(OP_DEBUG);
+        self.n_gates += 1;
     }
 
     /// Reduce builder to its result

@@ -13,10 +13,13 @@ pub const OP_SUB: usize = 4;
 pub const OP_MUL: usize = 5;
 pub const OP_MUL_CONST: usize = 6;
 pub const OP_SELECT: usize = 7;
+pub const OP_SELECT_CONST: usize = 19;
 // - binary and arithmetic
 pub const OP_CONV_B2A: usize = 8;
 pub const OP_CONV_A2B: usize = 9;
+pub const OP_DECODE32: usize = 22;
 pub const OP_DECODE64: usize = 16;
+pub const OP_ENCODE4: usize = 21;
 pub const OP_ENCODE8: usize = 17;
 pub const OP_ENCODE32: usize = 18;
 pub const OP_CONST: usize = 10;
@@ -27,8 +30,10 @@ pub const OP_CHECK_EQ: usize = 13;
 pub const OP_CHECK_AND: usize = 14;
 pub const OP_CHECK_ALL_EQ_BUT_ONE: usize = 15;
 
+pub const OP_DEBUG: usize = 20;
+
 /// Index of the first argument
-pub const ARG0: usize = 19;
+pub const ARG0: usize = 23;
 
 use std::u64::MAX;
 
@@ -92,7 +97,7 @@ pub fn eval64(c: &Circuit<u64>, mut wires: Vec<u64>) -> Vec<u64> {
                 // args: idx1, idx2, ..., idxn
                 // outw: x1 + x2 + ... xn
                 while gates[i] >= ARG0 {
-                    res += wires[gates[i] - ARG0];
+                    res = res.wrapping_add(wires[gates[i] - ARG0]);
                     i += 1;
                     if i >= gates.len() {
                         break;
@@ -104,7 +109,7 @@ pub fn eval64(c: &Circuit<u64>, mut wires: Vec<u64>) -> Vec<u64> {
                 // outw: x - y
                 let lhs = wires[gates[i] - ARG0];
                 let rhs = wires[gates[i + 1] - ARG0];
-                res = lhs - rhs;
+                res = lhs.wrapping_sub(rhs);
                 i += 2;
             }
             OP_MUL => {
@@ -112,7 +117,7 @@ pub fn eval64(c: &Circuit<u64>, mut wires: Vec<u64>) -> Vec<u64> {
                 // outw: x * y
                 let lhs = wires[gates[i] - ARG0];
                 let rhs = wires[gates[i + 1] - ARG0];
-                res = lhs * rhs;
+                res = lhs.wrapping_mul(rhs);
                 i += 2;
             }
             OP_MUL_CONST => {
@@ -120,7 +125,7 @@ pub fn eval64(c: &Circuit<u64>, mut wires: Vec<u64>) -> Vec<u64> {
                 // outw: c * x
                 let c = consts[gates[i] - ARG0];
                 let x = wires[gates[i + 1] - ARG0];
-                res = c * x;
+                res = c.wrapping_mul(x);
                 i += 2;
             }
             OP_SELECT => {
@@ -128,6 +133,7 @@ pub fn eval64(c: &Circuit<u64>, mut wires: Vec<u64>) -> Vec<u64> {
                 // outw: xi
                 let i_ = wires[gates[i] - ARG0];
                 let i_: usize = i_.try_into().ok().unwrap();
+                //dbg!(i_, gates[i] - ARG0);
                 i += i_ + 1;
                 res = wires[gates[i] - ARG0];
                 while gates[i] >= ARG0 {
@@ -137,9 +143,37 @@ pub fn eval64(c: &Circuit<u64>, mut wires: Vec<u64>) -> Vec<u64> {
                     }
                 }
             }
+            OP_SELECT_CONST => {
+                // args: idi, idc1, idc2, ..., idcn where i <= n
+                // outw: ci
+                let i_ = wires[gates[i] - ARG0];
+                let i_: usize = i_.try_into().ok().unwrap();
+                i += i_ + 1;
+                res = consts[gates[i] - ARG0];
+                while gates[i] >= ARG0 {
+                    i += 1;
+                    if i >= gates.len() {
+                        break;
+                    }
+                }
+            }
+            OP_DECODE32 => {
+                // args: x where x < 2^32
+                // outw: idx1, idx2, ..., idxn s.t sum 2^{i-1}*xi
+                let mut x = wires[gates[i] - ARG0];
+                u32::try_from(x).unwrap();
+                for _ in 1..32 {
+                    res = u64::from(x.trailing_ones() > 0);
+                    wires.push(res);
+                    x >>= 1;
+                }
+                res = u64::from(x.trailing_ones() > 0);
+                i += 1;
+            }
             OP_DECODE64 => {
                 // args: x where x < 2^64
                 // outw: idx1, idx2, ..., idxn s.t sum 2^{i-1}*xi
+                dbg!(i, gates[i] - ARG0);
                 let mut x = wires[gates[i] - ARG0];
                 for _ in 1..64 {
                     res = u64::from(x.trailing_ones() > 0);
@@ -149,9 +183,22 @@ pub fn eval64(c: &Circuit<u64>, mut wires: Vec<u64>) -> Vec<u64> {
                 res = u64::from(x.trailing_ones() > 0);
                 i += 1;
             }
+            OP_ENCODE4 => {
+                // args: idx1, idx2, idx3, idx4
+                // outw: sum 2^{i-1}*xi
+                //
+                // assumse xs are all bits so no overflow happens.
+                for k in 0..4 {
+                    let xk = wires[gates[i] - ARG0];
+                    res += 2u64.pow(k) * xk;
+                    i += 1;
+                }
+            }
             OP_ENCODE8 => {
                 // args: idx1, idx2, ..., idx8
                 // outw: sum 2^{i-1}*xi
+                //
+                // assumse xs are all bits so no overflow happens.
                 for k in 0..8 {
                     let xk = wires[gates[i] - ARG0];
                     res += 2u64.pow(k) * xk;
@@ -161,6 +208,8 @@ pub fn eval64(c: &Circuit<u64>, mut wires: Vec<u64>) -> Vec<u64> {
             OP_ENCODE32 => {
                 // args: idx1, idx2, ..., idx32
                 // outw: sum 2^{i-1}*xi
+                //
+                // assumse xs are all bits so no overflow happens.
                 for k in 0..32 {
                     let xk = wires[gates[i] - ARG0];
                     res += 2u64.pow(k) * xk;
@@ -187,8 +236,6 @@ pub fn eval64(c: &Circuit<u64>, mut wires: Vec<u64>) -> Vec<u64> {
             OP_CONST => {
                 // args: idc
                 // outw: c
-                dbg!(i);
-                dbg!(gates[i]);
                 res = consts[gates[i] - ARG0];
                 i += 1;
             }
@@ -210,6 +257,7 @@ pub fn eval64(c: &Circuit<u64>, mut wires: Vec<u64>) -> Vec<u64> {
                 // asserts: xj = yj for j != i
                 let mut res_ = true;
                 let mut i_ = wires[gates[i] - ARG0];
+                dbg!(i_);
                 i += 1;
                 while gates[i] > ARG0 {
                     if i_ == 0 {
@@ -219,17 +267,21 @@ pub fn eval64(c: &Circuit<u64>, mut wires: Vec<u64>) -> Vec<u64> {
                     }
                     let x = wires[gates[i] - ARG0];
                     let y = wires[gates[i + 1] - ARG0];
+                    dbg!(x, y, i, gates[i], gates[i + 1]);
                     res_ &= x == y;
                     i += 2;
                     i_ -= 1;
                 }
                 assert!(res_)
             }
+            OP_DEBUG => {
+                dbg!("here");
+            }
+
             _ => panic!("invalid operation"),
         }
-        if (op != OP_OUT) & !is_check(op) {
+        if (op != OP_OUT) & !is_check(op) & !matches!(op, OP_DEBUG) {
             dbg!(res);
-            // wires[j - out.len() + n_in] = res;
             wires.push(res);
         }
         dbg!(&wires);

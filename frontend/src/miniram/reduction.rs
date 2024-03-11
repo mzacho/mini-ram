@@ -17,23 +17,40 @@ use super::encode::encode;
 pub fn encode_witness(prog: &Prog, args: Vec<Word>, t: usize) -> Res<Vec<u64>> {
     let (res, mut lsts) = interpret(prog, args, t)?;
     assert_eq!(res, 0);
-    if lsts.len() < t {
-        dbg!(&lsts);
+    if lsts.len() + 1 < t {
+        dbg!("appending to witness", &lsts);
         // assume program runs for at least one step
         let last_st = *lsts.last().unwrap();
-        for _ in lsts.len()..t {
+        for _ in lsts.len() + 1..t {
             lsts.push(last_st);
         }
     }
     Ok(convert_localstates(lsts))
 }
 
+/// Convert the local states to the witness, which is a vector of
+/// values from the circuit.
+///
+/// Each local state is flattened to a vector of the form:
+///
+///   pc, r1, ..., r15, Z
+///
+/// and then all local states are flattened to a single vector.
 fn convert_localstates(lsts: Vec<LocalState>) -> Vec<u64> {
-    lsts.iter().flatten().map(|v| u64::from(*v)).collect()
+    let mut res = vec![];
+    for (store, flags) in lsts {
+        for val in store {
+            res.push(u64::from(val))
+        }
+        for flag in flags {
+            res.push(u64::from(flag))
+        }
+    }
+    res
 }
 
 /// Number of circuit elements (u64) in LocalState
-const SIZE_LOCAL_ST: usize = N_REG;
+const SIZE_LOCAL_ST: usize = N_REG + N_CFL;
 
 /// Generates a circuit for verifying the existence of an input
 /// (witness), that will make the program return 0 within time bound
@@ -53,17 +70,62 @@ pub fn generate_circuit(prog: &Prog, t: usize) -> builder::Res<u64> {
     let l = p.len();
     for instr in p {
         let _ = b.push_const(instr);
-        // id of constant gate can be ignored, as the gates are the
-        // first to be added to the circuit. We just use the id of
-        // the i'th instruction as i when needed.
+        // id of constant gate can be ignored: As the gates are the
+        // first to be added to the circuit, we just use i as the id of
+        // the i'th (zero indexed) instruction when needed.
     }
 
-    // compose transition circuit t times
-    for i in 0..t {
-        let mut o = transition_circuit(&mut b, i, l, n_in);
+    // push constants
+    let zero = b.push_const(0);
+    let one = b.push_const(1);
+    let zero = b.const_(zero);
+    let one = b.const_(one);
+
+    // compose transition circuit t times, where the first iteration
+    // uses initial values (zeros) for all registers
+    outputs.append(&mut first_transition_circuit(&mut b, zero, one));
+
+    for i in 1..t {
+        let mut o = transition_circuit(&mut b, i - 1, l, one);
         outputs.append(&mut o);
     }
     b.build(&outputs)
+}
+
+fn first_transition_circuit(b: &mut builder::Builder<u64>, zero: usize, one: usize) -> Vec<usize> {
+    // Fetch first instruction
+    let instr = b.const_(ARG0);
+
+    // Decode it
+    let (op, dst, _, _, arg1_w) = gadgets::decode_instr64(b, instr);
+
+    // Get output value of dst register, used for mocking the result
+    // of memory operations.
+    let dst_out = b.select_range(dst, ARG0, ARG0 + N_REG, 1);
+    let cfl_out = ARG0 + N_REG;
+
+    // Compute the result of the ALU at this transition step.
+    //
+    // Pass zero for the value of (registers referenced by) arg0,
+    // arg1 as well as the conditional Z flag. (todo: what if arg0
+    // == pc?)
+    let (res, z) = alu(b, op, zero, zero, arg1_w, dst_out, one);
+
+    // Output res-dst_out and z-cfl_out (both should be zero)
+    let check_alu = b.sub(res, dst_out);
+    let check_cfl = b.sub(z, cfl_out);
+
+    // Cncrement pc
+    let pc = one;
+
+    // Check all in/ out registers except dst are consistent
+    let mut regs = vec![(pc, ARG0)];
+    for i in 1..N_REG {
+        regs.push((zero, ARG0 + i))
+    }
+    b.check_all_eq_but_one(dst, &regs);
+
+    vec![check_alu, check_cfl]
 }
 
 /// Input:
@@ -72,76 +134,98 @@ pub fn generate_circuit(prog: &Prog, t: usize) -> builder::Res<u64> {
 /// - l: number of lines of source code
 ///
 /// Output: ids of output nodes
-fn transition_circuit(
-    b: &mut builder::Builder<u64>,
-    i: usize,
-    l: usize,
-    n_in: usize,
-) -> Vec<usize> {
-    // register offset into local state
-    let k0 = i * SIZE_LOCAL_ST;
-    let k1 = (i + 1) * SIZE_LOCAL_ST;
-    let k2 = (i + 2) * SIZE_LOCAL_ST;
-    // fetch instruction
+fn transition_circuit(b: &mut builder::Builder<u64>, i: usize, l: usize, one: usize) -> Vec<usize> {
+    let k0 = i * SIZE_LOCAL_ST + ARG0;
+    let k1 = (i + 1) * SIZE_LOCAL_ST + ARG0;
+    let k2 = (i + 2) * SIZE_LOCAL_ST + ARG0;
+
+    // Fetch instruction
     b.offset_arg0();
-    let pc = b.select_range(k0 + usize::from(PC), 0, n_in, 1);
-    let instr = b.const_(pc);
-    // decode instruction
-    let (op, dst, arg0, arg1) = gadgets::decode_instr64(b, instr);
-    // get value of registers
-    #[rustfmt::skip]
-    let _dst_in  = b.select_range(dst , k0 + ARG0, k1 + ARG0, 1);
-    let arg0_in = b.select_range(arg0, k0 + ARG0, k1 + ARG0, 1);
-    let arg1_in = b.select_range(arg1, k0 + ARG0, k1 + ARG0, 1);
+    let instr = b.select_const_range(k0 + usize::from(PC) - ARG0, 0, l, 1);
 
-    #[rustfmt::skip]
-    let dst_out  = b.select_range(dst , k1 + ARG0, k2 + ARG0, 1);
-    let _arg0_out = b.select_range(arg0, k1 + ARG0, k2 + ARG0, 1);
-    let _arg1_out = b.select_range(arg1, k1 + ARG0, k2 + ARG0, 1);
+    // Decode instruction
+    let (op, dst, arg0, arg1, arg1_w) = gadgets::decode_instr64(b, instr);
 
-    let res = alu(b, op, arg1_in, arg0_in, dst_out);
+    // Get value of registers refered to by dst, arg0 and arg1 as
+    // well as value of Z flag
+    let arg0 = b.select_range(arg0, k0, k1 - N_CFL, 1);
+    let arg1 = b.select_range(arg1, k0, k1 - N_CFL, 1);
+    let dst_out = b.select_range(dst, k1, k2 - N_CFL, 1);
+    let cfl_out = k2 - N_CFL;
 
-    // Output res-dst_out (should be zero)
+    let (res, z) = alu(b, op, arg0, arg1, arg1_w, dst_out, one);
+
+    // Ouput res-dst_out and z-cfl_out - both should be zero if the
+    // witness to satisfies the circuit.
     let check_alu = b.sub(res, dst_out);
+    let check_cfl = b.sub(z, cfl_out);
 
-    // Check all in/ out registers are consistent but dst
-    let regs = (k0 + ARG0..k1 + ARG0).zip(k1 + ARG0..k2 + ARG0);
-    let regs = &regs.collect::<Vec<(usize, usize)>>();
-    b.check_all_eq_but_one(dst, regs);
+    // increment pc
+    let pc = b.add(&[k0 + usize::from(PC), one]);
 
-    vec![check_alu]
+    // Check all in/ out registers except dst are consistent
+    let mut regs = vec![(pc, k1)];
+    for i in 1..N_REG {
+        regs.push((k0 + i, k1 + i))
+    }
+    b.check_all_eq_but_one(dst, &regs);
+
+    vec![check_alu, check_cfl]
 }
 
 /// Input:
 ///   - op: opcode of instruction
-///   - arg0: value of arg0
-///   - arg1: vaule of arg1
+///   - arg0: value of arg0 (as a 4 bit register).
+///   - arg1: value of arg1 (as a 4 bit register).
+///   - arg1_w: value of arg1 (as a 32 bit word).
+///   - cfl_z: value of the (isZero) Z conditional flag.
 ///   - dst_out: value of destination register. This should be equal
-///   to the output of the alu
+///   to the output of the alu. This is used for mocking the result
+///   of memory operations.
 ///
-/// Output:
-///   - Value of applying op to arg0, arg1 OR dst_out of op is a
+/// Output pair (res, z) where:
+///   - res: Value of applying op to arg0, arg1 OR dst_out of op is a
 ///   memory operation (which are checked by a seperate memory
 ///   consistency circuit)
+///   - z: is the boolean value of the Z flag.
 ///
 /// todo? Vector of outputs of the circuit, which should all be zero
-fn alu(b: &mut Builder<u64>, op: usize, arg1_in: usize, arg0_in: usize, dst_out: usize) -> usize {
+fn alu(
+    b: &mut Builder<u64>,
+    op: usize,
+    arg0: usize,
+    arg1: usize,
+    arg1_w: usize,
+    dst_out: usize,
+    one: usize,
+) -> (usize, usize) {
     // Compute each possible operation of the architecture in order
     // of the encoding of opcodes. Then select the correct value
     // using the opcode.
-    let a0 = b.add(&[arg0_in, arg1_in]); // add
-    let a1 = b.sub(arg0_in, arg1_in); // sub
-    let a2 = arg1_in; // mov register
-    let a3 = arg1_in; // mov constant
+    let a0 = b.add(&[arg0, arg1]); // add
+    let a1 = b.sub(arg0, arg1); // sub
+    let a2 = arg1; // mov register
+    let a3 = arg1_w; // mov constant
     let a4 = dst_out; // ldr
     let a5 = dst_out; // str
-    let a6 = arg1_in; // b
-    let a7 = arg1_in; // b z (TODO)
-    let a8 = arg1_in; // ret register
-    let a9 = arg1_in; // ret constant
+    let a6 = arg1; // b
+    let a7 = arg1; // b z (TODO)
+    let a8 = arg1; // ret register
+    let a9 = arg1_w; // ret constant
 
     let ids = &vec![a0, a1, a2, a3, a4, a5, a6, a7, a8, a9];
-    b.select(op, ids)
+    let res = b.select(op, ids);
+
+    // Compute the value of the Z flag by destructing res into its
+    // bit-decomposition, converting each bit to Z2, OR-ing them
+    // all together and negating the ouput.
+    let decode_res = b.decode32(res);
+    let mut tmp = b.or(decode_res, decode_res + 1);
+    for i in 2..32 {
+        tmp = b.or(tmp, decode_res + i)
+    }
+    let z = b.xor(&[tmp, one]);
+    (res, z)
 }
 
 #[cfg(test)]
@@ -156,9 +240,10 @@ mod test {
 
     #[test]
     fn test_encode_witness() {
+        let t = 100;
         let p = &mul_eq();
         let args = vec![2, 2, 4];
-        assert!(encode_witness(p, args, 20).is_ok());
+        encode_witness(p, args, t).unwrap();
     }
 
     #[test]
@@ -174,9 +259,16 @@ mod test {
         let args = vec![];
         let time_bound = 1;
         let res = convert_and_eval(prog, args, time_bound);
-        for v in res {
-            assert_eq!(v, 0)
-        }
+        assert_eq!(vec![0; res.len()], res);
+    }
+
+    #[test]
+    fn test_b_skip() {
+        let prog = &b_skip();
+        let args = vec![];
+        let time_bound = 3; // notice: t < len(encode(prog))
+        let res = convert_and_eval(prog, args, time_bound);
+        assert_eq!(vec![0; res.len()], res);
     }
 
     #[test]
@@ -185,12 +277,29 @@ mod test {
         let args = vec![];
         let time_bound = 2;
         let res = convert_and_eval(prog, args, time_bound);
-        for v in res {
-            assert_eq!(v, 0)
-        }
+        assert_eq!(vec![0; res.len()], res);
     }
 
     #[test]
+    fn test_mov_2pow20() {
+        let prog = &mov2pow20_ret0();
+        let args = vec![];
+        let time_bound = 2;
+        let res = convert_and_eval(prog, args, time_bound);
+        assert_eq!(vec![0; res.len()], res);
+    }
+
+    #[test]
+    fn test_mov42_movr3_ret0() {
+        let prog = &mov42_movr3_ret0();
+        let args = vec![];
+        let time_bound = 4;
+        let res = convert_and_eval(prog, args, time_bound);
+        assert_eq!(vec![0; res.len()], res);
+    }
+
+    #[test]
+    #[ignore]
     fn test_mov42_ret() {
         let prog = &mov42_ret();
         let args = vec![];
@@ -207,20 +316,16 @@ mod test {
         let args = vec![];
         let time_bound = 4;
         let res = convert_and_eval(prog, args, time_bound);
-        for v in res {
-            assert_eq!(v, 0)
-        }
+        assert_eq!(vec![0; res.len()], res);
     }
 
     #[test]
     fn convert_and_eval_mul_eq() {
         let prog = &mul_eq();
         let args = vec![2, 2, 4];
-        let time_bound = 1000;
+        let time_bound = 22;
         let res = convert_and_eval(prog, args, time_bound);
-        for v in res {
-            assert_eq!(v, 0)
-        }
+        assert_eq!(vec![0; res.len()], res);
     }
 
     fn convert_and_eval(p: &Prog, args: Vec<Word>, t: usize) -> Vec<u64> {

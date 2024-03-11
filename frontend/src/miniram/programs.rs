@@ -68,6 +68,26 @@ pub fn mov42_ret() -> Prog {
     Builder::new().mov_c(2, 42).ret_r(2).build()
 }
 
+/// MOV r2, b100000000000000000000; RET 0
+#[cfg(test)]
+pub fn mov2pow20_ret0() -> Prog {
+    Builder::new().mov_c(2, 2u32.pow(20)).ret_r(3).build()
+}
+
+/// MOV r2, 42
+/// MOV r3, r2
+/// ADD r4, r15, r3
+/// RET 0
+#[cfg(test)]
+pub fn mov42_movr3_ret0() -> Prog {
+    Builder::new()
+        .mov_c(2, 42)
+        .mov_r(3, 2)
+        .add(4, 15, 3)
+        .ret_c(0)
+        .build()
+}
+
 /// MOV r2, 2
 /// MOV r3, 2
 /// SUB r2, r2, r3
@@ -75,10 +95,24 @@ pub fn mov42_ret() -> Prog {
 #[cfg(test)]
 pub fn mov_mov_sub_ret() -> Prog {
     Builder::new()
-        .mov_c(2, 0)
-        .mov_c(3, 0)
+        .mov_c(2, 2)
+        .mov_c(3, 2)
         .sub(2, 2, 3)
         .ret_r(2)
+        .build()
+}
+
+/// MOV r2, 3
+/// B r2         <-- skips next instr
+/// MOV r3, 42
+/// RET 0
+#[cfg(test)]
+pub fn b_skip() -> Prog {
+    Builder::new()
+        .mov_c(2, 3)
+        .b(2)
+        .mov_c(3, 42)
+        .ret_c(0)
         .build()
 }
 

@@ -1,18 +1,17 @@
 use std::collections::HashMap;
-use strum::IntoEnumIterator;
 
 use crate::miniram::lang::reg::*;
 use crate::miniram::lang::*;
 
 type Mem = HashMap<Word, Word>;
 type Store = [Word; N_REG];
-type Cflags = HashMap<Cond, bool>;
+type Cflags = [bool; N_CFL];
 
 pub type Res<T> = Result<T, &'static str>;
 /// Local state of program execution. Consists of:
 /// - Value of all registers
 /// - todo: Value of conditional flags
-pub type LocalState = Store;
+pub type LocalState = (Store, Cflags);
 
 /// Executes prog on args for maximum t steps.
 ///
@@ -23,7 +22,7 @@ pub fn interpret(prog: &Prog, args: Vec<Word>, t: usize) -> Res<(Word, Vec<Local
     let mut mem = init_mem(args);
     let mut st = init_store();
     let mut cfl = init_cflags();
-    let mut sts = vec![st];
+    let mut sts = vec![];
 
     let pc = usize::from(PC);
     let mut i = fetch(prog, st[pc])?;
@@ -45,7 +44,7 @@ pub fn interpret(prog: &Prog, args: Vec<Word>, t: usize) -> Res<(Word, Vec<Local
                 let x = usize::from(x);
                 let y = usize::from(y);
                 let v = st[x] + st[y];
-                cfl.insert(Cond::Z, v == 0);
+                set_flags(&mut cfl, v);
                 st[dst] = v
             }
             Inst::Sub(dst, x, y) => {
@@ -53,33 +52,38 @@ pub fn interpret(prog: &Prog, args: Vec<Word>, t: usize) -> Res<(Word, Vec<Local
                 let x = usize::from(x);
                 let y = usize::from(y);
                 let v = st[x] - st[y];
-                cfl.insert(Cond::Z, v == 0);
+                set_flags(&mut cfl, v);
                 st[dst] = v
             }
             Inst::Mov(dst, v) => {
                 let dst = usize::from(dst);
-                match v {
-                    Val::Reg(src) => st[dst] = st[usize::from(src)],
-                    Val::Const(c) => st[dst] = c,
-                }
+                let v = match v {
+                    Val::Reg(src) => st[usize::from(src)],
+                    Val::Const(c) => c,
+                };
+                set_flags(&mut cfl, v);
+                st[dst] = v
             }
             Inst::Ldr(dst, src) => {
                 let dst = usize::from(dst);
                 let src = usize::from(src);
                 let addr = &st[src];
-                st[dst] = mem[addr]
+                let v = mem[addr];
+                set_flags(&mut cfl, v);
+                st[dst] = v
             }
             Inst::Str(dst, src) => {
                 let dst = usize::from(dst);
                 let src = usize::from(src);
                 let addr = st[dst];
+                set_flags(&mut cfl, addr);
                 mem.insert(addr, st[src]);
             }
             Inst::B(cond, r) => {
                 let pc_ = match cond {
                     Some(cond) => match cond {
                         Cond::Z => {
-                            if cfl[&Cond::Z] {
+                            if cfl[0] {
                                 st[usize::from(r)]
                             } else {
                                 st[pc] + 1
@@ -88,36 +92,35 @@ pub fn interpret(prog: &Prog, args: Vec<Word>, t: usize) -> Res<(Word, Vec<Local
                     },
                     None => st[usize::from(r)],
                 };
+                set_flags(&mut cfl, pc_);
                 st[pc] = pc_;
                 i = fetch(prog, st[pc])?;
+                sts.push(record(&st, &cfl));
                 continue;
             }
             Inst::Ret(v) => {
-                let x = match v {
+                let v = match v {
                     Val::Reg(r) => st[usize::from(r)],
                     Val::Const(c) => c,
                 };
+                set_flags(&mut cfl, v);
                 // machine returns in r1
-                st[1] = x;
-                sts.push(record(&st));
+                st[1] = v;
+                inc_pc(&mut st);
+                sts.push(record(&st, &cfl));
                 break v;
             }
         };
         inc_pc(&mut st);
         i = fetch(prog, st[pc])?;
-        sts.push(record(&st));
-        if sts.len() > t {
+        sts.push(record(&st, &cfl));
+        if sts.len() >= t {
             return Err("time bound exceeded");
         }
     };
 
-    Ok((
-        match res {
-            Val::Reg(r) => st[usize::from(r)],
-            Val::Const(c) => c,
-        },
-        sts,
-    ))
+    dbg!(&st);
+    Ok((res, sts))
 }
 
 fn fetch(prog: &Prog, pc: Word) -> Res<&Inst> {
@@ -145,17 +148,21 @@ fn init_store() -> Store {
     [0; N_REG]
 }
 
+#[inline]
 fn init_cflags() -> Cflags {
-    let mut cfl = Cflags::new();
-    for f in Cond::iter() {
-        cfl.insert(f, false);
-    }
-    cfl
+    [false; N_CFL]
+}
+
+/// Sets conditional flags:
+///  - cfl[0] = 1  iff  v == 0  (i.e cfl[0] is the flag Z)
+#[inline]
+fn set_flags(cfl: &mut Cflags, v: Word) {
+    cfl[0] = v == 0
 }
 
 /// Records the current local state of the program execution
 /// todo: extend with cflags
 #[inline]
-fn record(st: &Store) -> LocalState {
-    *st
+fn record(st: &Store, cfl: &Cflags) -> LocalState {
+    (*st, *cfl)
 }

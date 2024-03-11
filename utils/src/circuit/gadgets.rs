@@ -32,21 +32,20 @@ where
 
 /// Decodes instr as encoded by frontend::miniram::encode::encode_instr_u64
 ///
-/// Input: i, the first word of the instruction.
+/// Input: i, the (index of the) constant holding the 64 bit
+/// instruction.
 ///
-/// Assumes that the (two) words of each instruction are layed out
-/// in consecutive constants in the circuit.
-///
-/// Returns op, dst, arg0, arg1
-pub fn decode_instr64(b: &mut Builder<u64>, i: usize) -> (usize, usize, usize, usize) {
+/// Returns op, dst, arg0, arg1, arg1 as a word
+pub fn decode_instr64(b: &mut Builder<u64>, i: usize) -> (usize, usize, usize, usize, usize) {
     // Destruct instruction into its bit-decomposition
     let i1 = b.decode64(i);
 
     let op = b.encode8(i1 + 56);
-    let dst = b.encode8(i1 + 48);
-    let arg0 = b.encode8(i1 + 40);
-    let arg1 = i + 1;
-    (op, dst, arg0, arg1)
+    let dst = b.encode4(i1 + 48);
+    let arg0 = b.encode4(i1 + 40);
+    let arg1 = b.encode4(i1);
+    let arg1_word = b.encode32(i1);
+    (op, dst, arg0, arg1, arg1_word)
 }
 
 #[cfg(test)]
