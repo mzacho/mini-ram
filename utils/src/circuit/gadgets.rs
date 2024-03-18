@@ -2,6 +2,33 @@ use crate::circuit::ARG0;
 
 use super::builder::Builder;
 
+pub fn bit_comparator<T>(
+    b: &mut Builder<T>,
+    x: usize,
+    y: usize,
+    one: usize,
+) -> (usize, usize, usize) {
+    let x_neg = b.xor(&[x, one]);
+    let y_neg = b.xor(&[y, one]);
+    let x_lt_y = b.and(x_neg, y);
+    let x_gt_y = b.and(y_neg, x);
+    let eq = b.xor(&[x_lt_y, x_gt_y, one]);
+    (x_lt_y, eq, x_gt_y)
+}
+
+pub fn word_comparator<T>(b: &mut Builder<T>, xs: &[usize], ys: &[usize], one: usize) -> usize {
+    assert_eq!(xs.len(), ys.len());
+    assert!(!(xs.is_empty() | ys.is_empty()));
+    let (lt, _, _) = bit_comparator(b, xs[0], ys[0], one);
+    let mut prev = lt;
+    for i in 1..xs.len() {
+        let (lt, eq, _) = bit_comparator(b, xs[i], ys[i], one);
+        let tmp = b.and(eq, prev);
+        prev = b.or(lt, tmp);
+    }
+    prev
+}
+
 pub fn half_adder<T>(b: &mut Builder<T>, x: usize, y: usize) -> (usize, usize) {
     let sum = b.xor(&[x, y]);
     let carry = b.and(x, y);
@@ -155,13 +182,10 @@ pub fn decode_instr64(b: &mut Builder<u64>, i: usize) -> (usize, usize, usize, u
 mod tests {
     use permutation::Permutation;
 
-    use crate::circuit::builder::Builder;
-    use crate::circuit::eval64;
-    use crate::circuit::pp;
-    use crate::circuit::ARG0;
+    use crate::circuit::{builder, eval64};
     use crate::waksman::route;
 
-    use super::{full_adder, half_adder, ripple_adder, waksman};
+    use super::*;
 
     fn arg(id: usize) -> usize {
         ARG0 + id
@@ -173,6 +197,91 @@ mod tests {
             res.push(ARG0 + i)
         }
         res
+    }
+
+    fn build_bit_comparator(n: usize) -> builder::Res<u64> {
+        let n_in = n * 2;
+        let mut b = Builder::new(n_in);
+        let one = b.push_const(1);
+        let one = b.const_(one);
+        let xs = &argv(n_in)[..n];
+        let ys = &argv(n_in)[n..];
+        let res = word_comparator(&mut b, xs, ys, one);
+        b.build(&[res])
+    }
+
+    #[test]
+    fn bit_comparator() {
+        let c = build_bit_comparator(2);
+        let res = eval64(&c, vec![0, 0, 0, 0]);
+        assert_eq!(res, [0]);
+
+        let res = eval64(&c, vec![1, 0, 0, 0]);
+        assert_eq!(res, [0]);
+
+        let res = eval64(&c, vec![0, 1, 0, 0]);
+        assert_eq!(res, [0]);
+
+        let res = eval64(&c, vec![1, 0, 0, 0]);
+        assert_eq!(res, [0]);
+
+        let res = eval64(&c, vec![1, 1, 0, 0]);
+        assert_eq!(res, [0]);
+
+        let res = eval64(&c, vec![0, 0, 1, 0]);
+        assert_eq!(res, [1]);
+
+        let res = eval64(&c, vec![0, 0, 0, 1]);
+        assert_eq!(res, [1]);
+
+        let res = eval64(&c, vec![0, 0, 1, 1]);
+        assert_eq!(res, [1]);
+
+        let res = eval64(&c, vec![1, 0, 1, 0]);
+        assert_eq!(res, [0]);
+
+        let res = eval64(&c, vec![1, 0, 0, 1]);
+        assert_eq!(res, [1]);
+
+        let res = eval64(&c, vec![1, 0, 1, 1]);
+        assert_eq!(res, [1]);
+
+        let res = eval64(&c, vec![0, 1, 0, 1]);
+        assert_eq!(res, [0]);
+
+        let res = eval64(&c, vec![0, 1, 1, 0]);
+        assert_eq!(res, [0]);
+
+        let res = eval64(&c, vec![0, 1, 1, 1]);
+        assert_eq!(res, [1]);
+
+        let c = build_bit_comparator(3);
+        let res = eval64(&c, vec![0, 0, 0, 0, 0, 0]);
+        assert_eq!(res, [0]);
+
+        let res = eval64(&c, vec![0, 0, 1, 0, 0, 0]);
+        assert_eq!(res, [0]);
+
+        let res = eval64(&c, vec![0, 1, 0, 0, 0, 0]);
+        assert_eq!(res, [0]);
+
+        let res = eval64(&c, vec![1, 0, 0, 0, 0, 0]);
+        assert_eq!(res, [0]);
+
+        let res = eval64(&c, vec![0, 0, 0, 0, 0, 1]);
+        assert_eq!(res, [1]);
+
+        let res = eval64(&c, vec![0, 0, 1, 0, 0, 1]);
+        assert_eq!(res, [0]);
+
+        let res = eval64(&c, vec![1, 0, 0, 0, 1, 0]);
+        assert_eq!(res, [1]);
+
+        let res = eval64(&c, vec![0, 1, 0, 0, 0, 1]);
+        assert_eq!(res, [1]);
+
+        let res = eval64(&c, vec![0, 1, 0, 1, 0, 0]);
+        assert_eq!(res, [0])
     }
 
     /// Generate settings for routing p, and test that routing the

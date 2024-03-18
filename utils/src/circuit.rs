@@ -55,7 +55,6 @@ pub fn eval64(c: &Circuit<u64>, mut wires: Vec<u64>) -> Vec<u64> {
     let n_gates = c.n_gates;
     assert_eq!(c.n_in, wires.len());
     assert_eq!(n_gates, count_ops(gates));
-    assert_eq!(n_gates, count_ops(gates));
     let mut out = Vec::new();
     let mut i = 0;
     for _ in 0..n_gates {
@@ -293,7 +292,7 @@ pub fn eval64(c: &Circuit<u64>, mut wires: Vec<u64>) -> Vec<u64> {
     out
 }
 
-/// Counts number of gates that aren't output or verification gates
+/// Counts number of gates
 fn count_ops(gates: &[usize]) -> usize {
     let mut res = 0;
     for i in gates {

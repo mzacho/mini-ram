@@ -1,6 +1,6 @@
-use std::collections::HashMap;
-use std::cmp::Ordering;
 use std::cmp::Eq;
+use std::cmp::Ordering;
+use std::collections::HashMap;
 
 use crate::miniram::lang::reg::*;
 use crate::miniram::lang::*;
@@ -78,11 +78,11 @@ impl Ord for LocalStateAug {
             // both instructions access memory,
             // sort according to location.
             let addr1 = match self.ma {
-                Read{addr, ..} | Write{addr, ..} => addr,
+                Read { addr, .. } | Write { addr, .. } => addr,
                 None => panic!("unreachable"),
             };
             let addr2 = match other.ma {
-                Read{addr, ..} | Write{addr, ..} => addr,
+                Read { addr, .. } | Write { addr, .. } => addr,
                 None => panic!("unreachable"),
             };
             addr1.cmp(&addr2)
@@ -99,8 +99,8 @@ impl PartialOrd for LocalStateAug {
 #[derive(PartialEq, Eq, Clone, Copy)]
 pub enum MemAccess {
     None,
-    Read{addr: Word, val: Word},
-    Write{addr: Word, val: Word},
+    Read { addr: Word, val: Word },
+    Write { addr: Word, val: Word },
 }
 
 /// Executes prog on args for maximum t steps.
@@ -164,7 +164,7 @@ pub fn interpret(prog: &Prog, args: Vec<Word>, t: usize) -> Res<(Word, Vec<Local
                 let val = mem[&addr];
                 set_flags(&mut cfl, val);
                 st[dst] = val;
-                MemAccess::Read{addr, val}
+                MemAccess::Read { addr, val }
             }
             Inst::Str(dst, src) => {
                 let dst = usize::from(dst);
@@ -173,7 +173,7 @@ pub fn interpret(prog: &Prog, args: Vec<Word>, t: usize) -> Res<(Word, Vec<Local
                 let val = st[src];
                 set_flags(&mut cfl, addr);
                 mem.insert(addr, val);
-                MemAccess::Read{addr, val}
+                MemAccess::Read { addr, val }
             }
             Inst::B(cond, r) => {
                 let pc_ = match cond {

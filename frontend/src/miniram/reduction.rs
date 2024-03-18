@@ -60,13 +60,13 @@ fn convert_localstates(lsts: Vec<LocalStateAug>) -> Witness {
 
     // Compute the permutation that sorts the states according to
     // memory accesses.
-    let p = permutation::sort(&lsts);
+    let _p = permutation::sort(&lsts);
 
-    // Push S1', ...
-    for s in p.apply_slice(&lsts) {
-        res.push(s.step);
-        e
-    }
+    // // Push S1', ...
+    // for s in p.apply_slice(&lsts) {
+    //     res.push(s.step);
+
+    // }
     // Compute
     // // Push S'1, S'2, ..., S't
     // // Since [T].sort_by() performs a stable sorting, and lsts is
@@ -102,8 +102,8 @@ pub fn generate_circuit(prog: &Prog, t: usize) -> builder::Res<u64> {
     for instr in p {
         let _ = b.push_const(instr);
         // id of constant gate can be ignored: As the gates are the
-        // first to be added to the circuit, we just use i as the id of
-        // the i'th (zero indexed) instruction when needed.
+        // first to be added to the circuit, we just use i as the
+        // id of the i'th (zero indexed) instruction when needed.
     }
 
     // push constants
@@ -112,8 +112,8 @@ pub fn generate_circuit(prog: &Prog, t: usize) -> builder::Res<u64> {
     let zero = b.const_(zero);
     let one = b.const_(one);
 
-    // compose transition circuit t times, where the first iteration
-    // uses initial values (zeros) for all registers
+    // compose transition circuit t times, where the first
+    // iteration uses initial values (zeros) for all registers
     outputs.append(&mut first_transition_circuit(&mut b, zero, one));
 
     for i in 1..t {
@@ -252,23 +252,30 @@ fn alu(b: &mut Builder<u64>, in_: AluIn, dst_out: usize, one: usize) -> (usize, 
     // Compute each possible operation of the architecture in order
     // of the encoding of opcodes. Then select the correct value
     // using the opcode.
-    let a0 = b.add(&[in_.arg0, in_.arg1]); // add
-    let a1 = b.sub(in_.arg0, in_.arg1); // sub
-    let a2 = in_.arg1; // mov register
-    let a3 = in_.arg1_word; // mov constant
-    let a4 = dst_out; // ldr
-    let a5 = dst_out; // str
-    let a6 = in_.arg1; // b
-                       // b z: compute (pc + 1) + cfl_z*(arg1 - (pc + 1))
+    let a1 = dst_out; // ldr
+    let a0 = dst_out; // str
+
+    let a2 = b.add(&[in_.arg0, in_.arg1]); // add
+    let a4 = b.sub(in_.arg0, in_.arg1); // sub
+    let a6 = in_.arg1; // mov register
+    let a8 = in_.arg1_word; // mov constant
+    let a10 = in_.arg1; // b
+                        // b z: compute (pc + 1) + cfl_z*(arg1 - (pc + 1))
     let tmp1 = b.add(&[in_.pc, one]);
     let tmp2 = b.sub(in_.arg1, tmp1);
     let tmp3 = b.mul(in_.cfl_z, tmp2);
-    let a7 = b.add(&[tmp1, tmp3]);
+    let a12 = b.add(&[tmp1, tmp3]);
 
-    let a8 = in_.arg1; // ret register
-    let a9 = in_.arg1_word; // ret constant
+    let a14 = in_.arg1; // ret register
+    let a16 = in_.arg1_word; // ret constant
 
-    let ids = &vec![a0, a1, a2, a3, a4, a5, a6, a7, a8, a9];
+    // used to trigger a run-time panic if this argument is returned
+    // as res. todo: select(in_.op / 2, ids) instead
+    let o = usize::MAX;
+
+    let ids = &vec![
+        a0, a1, a2, o, a4, o, a6, o, a8, o, a10, o, a12, o, a14, o, a16,
+    ];
     let res = b.select(in_.op, ids);
 
     // Compute the value of the Z flag by destructing res into its

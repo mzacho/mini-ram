@@ -23,7 +23,6 @@ pub type Config = Vec<bool>;
 ///
 /// TODE: This currently routes according to p.inverse() instead of p.
 pub fn route(p: &Permutation) -> Config {
-
     if p.len() == 1 {
         vec![]
     } else if p.len() == 2 {
