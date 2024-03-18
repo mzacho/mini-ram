@@ -2,3 +2,5 @@
 .cargo
 .direnv
 **/target
+*/*.dot
+*/*.svg

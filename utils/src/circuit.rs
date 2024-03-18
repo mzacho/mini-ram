@@ -1,6 +1,7 @@
 pub mod builder;
 pub mod circuits;
 pub mod gadgets;
+pub mod pp;
 
 // Operations for evaluation:
 // - binary
@@ -48,12 +49,12 @@ use builder::Res as Circuit;
 
 /// Evaluate a circuit of u64 values
 pub fn eval64(c: &Circuit<u64>, mut wires: Vec<u64>) -> Vec<u64> {
-    dbg!(&c.gates);
-    dbg!(&c.consts);
+    dbg!(c);
     let gates = &c.gates;
     let consts = &c.consts;
     let n_gates = c.n_gates;
-    #[cfg(test)]
+    assert_eq!(c.n_in, wires.len());
+    assert_eq!(n_gates, count_ops(gates));
     assert_eq!(n_gates, count_ops(gates));
     let mut out = Vec::new();
     let mut i = 0;
@@ -115,6 +116,8 @@ pub fn eval64(c: &Circuit<u64>, mut wires: Vec<u64>) -> Vec<u64> {
             OP_MUL => {
                 // args: idx, idy
                 // outw: x * y
+                dbg!(gates[i] - ARG0);
+                dbg!(gates[i + 1] - ARG0);
                 let lhs = wires[gates[i] - ARG0];
                 let rhs = wires[gates[i + 1] - ARG0];
                 res = lhs.wrapping_mul(rhs);
@@ -286,10 +289,10 @@ pub fn eval64(c: &Circuit<u64>, mut wires: Vec<u64>) -> Vec<u64> {
         }
         dbg!(&wires);
     }
+    pp::print(c, Some(&wires));
     out
 }
 
-#[cfg(test)]
 /// Counts number of gates that aren't output or verification gates
 fn count_ops(gates: &[usize]) -> usize {
     let mut res = 0;
@@ -301,7 +304,6 @@ fn count_ops(gates: &[usize]) -> usize {
     res
 }
 
-#[cfg(test)]
 /// Counts number of output gates
 pub fn count_out(gates: &[usize]) -> usize {
     let mut res = 0;
@@ -405,6 +407,28 @@ mod tests {
         let wires = vec![0b010101];
         let res = eval64(c, wires);
         assert_eq!(*res.last().unwrap(), 1);
+    }
+
+    #[test]
+    fn output_const() {
+        let mut b = Builder::<u64>::new(1);
+        let c = b.push_const(42);
+        let c = b.const_(c);
+        let g = &b.build(&[c]);
+        let res = eval64(g, vec![0]);
+        assert_eq!(res, vec![42]);
+    }
+
+    #[test]
+    fn add_const() {
+        let mut b = Builder::<u64>::new(1);
+        let ten = b.push_const(21);
+        let c1 = b.const_(ten);
+        let c2 = b.const_(ten);
+        let o = b.add(&[c1, c2]);
+        let g = &b.build(&[o]);
+        let res = eval64(g, vec![0]);
+        assert_eq!(res, vec![42]);
     }
 
     // #[test]

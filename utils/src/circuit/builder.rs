@@ -34,6 +34,7 @@ pub struct Builder<T> {
     offset_arg0: bool,
 }
 
+#[derive(Debug)]
 pub struct Res<T> {
     pub gates: Vec<usize>,
     pub consts: Vec<T>,

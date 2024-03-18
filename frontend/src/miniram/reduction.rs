@@ -1,6 +1,10 @@
+use std::cmp::Ordering;
+
 use crate::miniram::interpreter::*;
 use crate::miniram::lang::reg::*;
 use crate::miniram::lang::*;
+
+use utils::permutation;
 
 use utils::circuit::{
     builder::{self, Builder},
@@ -9,12 +13,14 @@ use utils::circuit::{
 
 use super::encode::encode;
 
+type Witness = Vec<u64>;
+
 /// Encodes args as a witness for the correct execution of the
 /// MiniRAM program prog (i.e a 0 evaluation).
 ///
 /// The witness consists of the local state of program execution,
 /// i.e a Vec<LocalState> that is as long as the time bound t
-pub fn encode_witness(prog: &Prog, args: Vec<Word>, t: usize) -> Res<Vec<u64>> {
+pub fn encode_witness(prog: &Prog, args: Vec<Word>, t: usize) -> Res<Witness> {
     let (res, mut lsts) = interpret(prog, args, t)?;
     assert_eq!(res, 0);
     if lsts.len() < t {
@@ -27,24 +33,52 @@ pub fn encode_witness(prog: &Prog, args: Vec<Word>, t: usize) -> Res<Vec<u64>> {
     Ok(convert_localstates(lsts))
 }
 
-/// Convert the local states to the witness, which is a vector of
-/// values from the circuit.
+/// Convert the local states to the witness, which is a vector W of
+/// values from the circuit layed out as
 ///
-/// Each local state is flattened to a vector of the form:
+///   W = S1, S2, ..., St, S'1, S'2, ..., S't, c1, ..., ck
 ///
-///   pc, r1, ..., r15, Z
+/// where Si represents the i'th local state with the value of the CPU
 ///
-/// and then all local states are flattened to a single vector.
-fn convert_localstates(lsts: Vec<LocalState>) -> Vec<u64> {
+///   Si = pc, r1, ..., r15, Z
+///
+/// and where the S'1, S'2, ..., S't = sort(S1, S2, ..., St)
+/// according to memory accesses with ties broken by timestamp, and
+/// where c1, ..., ck are the configuration of the AS-Waksman network
+/// that performs the sorting permutation.
+fn convert_localstates(lsts: Vec<LocalStateAug>) -> Witness {
     let mut res = vec![];
-    for (store, flags) in lsts {
-        for val in store {
+    // Push S1, S2, ..., St
+    for s in lsts.iter() {
+        for val in s.st.0 {
             res.push(u64::from(val))
         }
-        for flag in flags {
+        for flag in s.st.1 {
             res.push(u64::from(flag))
         }
     }
+
+    // Compute the permutation that sorts the states according to
+    // memory accesses.
+    let p = permutation::sort(&lsts);
+
+    // Push S1', ...
+    for s in p.apply_slice(&lsts) {
+        res.push(s.step);
+        e
+    }
+    // Compute
+    // // Push S'1, S'2, ..., S't
+    // // Since [T].sort_by() performs a stable sorting, and lsts is
+    // // already sorted by timestamp, then it's enough to sort by
+    // // memory location.
+    // lsts.into_iter()
+    //     .enumerate()
+    //     .collect::<Vec<(usize,LocalStateAug)>>()
+    //     .sort_by(cmp_mem_loc());
+
+    // todo: compute c1, ..., ck configurations of Benes network
+    // mock for now?
     res
 }
 
@@ -54,8 +88,6 @@ const SIZE_LOCAL_ST: usize = N_REG + N_CFL;
 /// Generates a circuit for verifying the existence of an input
 /// (witness), that will make the program return 0 within time bound
 /// t.
-///
-/// Circuit inputs: [LocalState; t]
 ///
 /// todo: Currently the program is hardcoded into the circuit as a
 /// constant. Change to Von Neumann type architecture.

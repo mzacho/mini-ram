@@ -36,17 +36,18 @@ fn encode_instr(i: &Inst) -> EInst64 {
             let (arg1, op_offset) = encode_val(y);
             encode_instr_u64(opcode + op_offset, dst, arg0, arg1)
         }
-        Ldr(x, y) => {
+        Ldr(dst, src) => {
             let opcode = 4;
-            let dst = encode_reg(x);
-            let arg0 = encode_reg(y);
+            let dst = encode_reg(dst);
+            let arg0 = encode_reg(src);
             let arg1 = 0;
             encode_instr_u64(opcode, dst, arg0, arg1)
         }
-        Str(x, y) => {
+        Str(dst, src) => {
             let opcode = 5;
-            let dst = encode_reg(x);
-            let arg0 = encode_reg(y);
+            let dst = encode_reg(dst);
+            let arg0 = encode_reg(src);
+
             let arg1 = 0;
             encode_instr_u64(opcode, dst, arg0, arg1)
         }

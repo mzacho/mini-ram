@@ -1,3 +1,5 @@
+use crate::circuit::ARG0;
+
 use super::builder::Builder;
 
 pub fn half_adder<T>(b: &mut Builder<T>, x: usize, y: usize) -> (usize, usize) {
@@ -30,6 +32,107 @@ where
     (carry, sums)
 }
 
+/// Construct a AS-Waksman network with xs as inputs, using the
+/// recursive construct of the following article:
+///
+/// Bruno Beauquier, Eric Darrot. On Arbitrary Waksman
+/// Networks and their Vulnerability. RR-3788,
+/// INRIA. 1999.
+///
+/// Inputs:
+///   - b: circuit builder
+///   - xs: ids of input wires to the network, assumes xs.len() > 0
+///   - conf: ids of configuration wires of the network, assumes
+///   conf.len() == sum {i=1..n} ceil(log2(i)).
+///   - one: id of the constant 1
+///
+/// Returns:
+///   - ids of outputs, guarantees res.0.len() == xs.len())
+///   - number of configuration inputs used
+pub fn waksman<T>(
+    b: &mut Builder<T>,
+    xs: &[usize],
+    conf: &[usize],
+    one: usize,
+) -> (Vec<usize>, usize) {
+    let n = xs.len();
+    if n < 1 {
+        panic!()
+    };
+    if n == 1 {
+        // assert_eq!(conf.len(), 0, "expected waksman conf.len()==0");
+        // When n=1 the network is just a link
+        (vec![xs[0]], 0)
+    } else if n == 2 {
+        // assert_eq!(conf.len(), 1, "expected waksman conf.len()==1");
+        // When n=2 the network is just a switch
+        let (a, b) = switch(b, xs[0], xs[1], conf[0], one);
+        (vec![a, b], 1)
+    } else if n.is_power_of_two() {
+        // ids of input wires for next layer
+        let mut ys = vec![];
+        let mut zs = vec![];
+        // Switches for input layer
+        for i in 0..n / 2 {
+            let (a, b) = switch(b, xs[2 * i], xs[2 * i + 1], conf[i], one);
+            ys.push(a);
+            zs.push(b);
+        }
+        // Construct sub-networks
+        let (ys, c1) = waksman(b, &ys, &conf[n / 2..], one);
+        let (zs, c2) = waksman(b, &zs, &conf[n / 2 + c1..], one);
+        // Switches for output layer
+        let mut res = vec![ys[0], zs[0]];
+        for i in 0..n / 2 - 1 {
+            let (a, b) = switch(b, ys[i + 1], zs[i + 1], conf[n / 2 + c1 + c2 + i], one);
+            res.push(a);
+            res.push(b);
+        }
+        (res, n + c1 + c2 - 1)
+    } else {
+        // ids of input wires for next layer
+        let mut ys = vec![xs[0]];
+        let mut zs = vec![];
+        // Switches for input layer
+        for i in 0..n / 2 {
+            let (a, b) = switch(b, xs[2 * i + 1], xs[2 * i + 2], conf[i], one);
+            dbg!(a - ARG0, b - ARG0);
+            ys.push(a);
+            zs.push(b);
+        }
+        // Construct sub-networks
+        let (ys, c1) = waksman(b, &ys, &conf[n / 2..], one);
+        dbg!(&ys);
+        let (zs, c2) = waksman(b, &zs, &conf[n / 2 + c1..], one);
+        dbg!(&zs);
+        // switches for output layer
+        let mut res = vec![ys[0]];
+        for i in 0..n / 2 {
+            let (a, b) = switch(b, ys[i + 1], zs[i], conf[n / 2 + c1 + c2 + i], one);
+            dbg!(a - ARG0, b - ARG0);
+            res.push(a);
+            res.push(b);
+        }
+        (res, n + c1 + c2 - 1)
+    }
+}
+
+/// Construct a binary switch with inputs x, y and configuration bit
+/// b by computing:
+///
+///  c: x*(1-b)+ y*b
+///  d: x*b    + y*(1-b)
+fn switch<T>(b: &mut Builder<T>, x: usize, y: usize, z: usize, one: usize) -> (usize, usize) {
+    let one_minus_z = b.sub(one, z);
+    let tmp1 = b.mul(x, one_minus_z);
+    let tmp2 = b.mul(x, z);
+    let tmp3 = b.mul(y, one_minus_z);
+    let tmp4 = b.mul(y, z);
+    let c = b.add(&[tmp1, tmp4]);
+    let d = b.add(&[tmp2, tmp3]);
+    (c, d)
+}
+
 /// Decodes instr as encoded by frontend::miniram::encode::encode_instr_u64
 ///
 /// Input: i, the (index of the) constant holding the 64 bit
@@ -50,11 +153,82 @@ pub fn decode_instr64(b: &mut Builder<u64>, i: usize) -> (usize, usize, usize, u
 
 #[cfg(test)]
 mod tests {
+    use permutation::Permutation;
+
     use crate::circuit::builder::Builder;
     use crate::circuit::eval64;
+    use crate::circuit::pp;
     use crate::circuit::ARG0;
+    use crate::waksman::route;
 
-    use super::{full_adder, half_adder, ripple_adder};
+    use super::{full_adder, half_adder, ripple_adder, waksman};
+
+    fn arg(id: usize) -> usize {
+        ARG0 + id
+    }
+
+    fn argv(argc: usize) -> Vec<usize> {
+        let mut res = vec![];
+        for i in 0..argc {
+            res.push(ARG0 + i)
+        }
+        res
+    }
+
+    /// Generate settings for routing p, and test that routing the
+    /// sequential series 0, 1, ..., n yields the result of applying
+    fn run_waksman(p: Permutation) {
+        let n = p.len();
+        let conf = route(&p);
+        let n_in = conf.len() + n;
+        let mut b = Builder::new(n_in);
+
+        let xs = argv(n_in);
+        let one = b.push_const(1);
+        let one = b.const_(one);
+        let (o, c_) = waksman(&mut b, &xs[..n], &xs[n..], one);
+        assert_eq!(conf.len(), c_);
+        let c = &b.build(&o);
+        let n_ = u64::try_from(n).unwrap();
+        let wires = (0..n_).chain(conf.iter().map(|b| u64::from(*b)));
+
+        let res = eval64(c, wires.collect());
+        assert_eq!(res, p.inverse().apply_slice((0..n_).collect::<Vec<_>>()));
+    }
+
+    #[test]
+    fn route_waksman() {
+        // n = 2
+        run_waksman(Permutation::one(2));
+        run_waksman(Permutation::oneline(vec![0, 1]));
+        run_waksman(Permutation::oneline(vec![1, 0]));
+        // n = 3
+        run_waksman(Permutation::one(3));
+        run_waksman(Permutation::oneline(vec![0, 1, 2]));
+        run_waksman(Permutation::oneline(vec![1, 0, 2]));
+        run_waksman(Permutation::oneline(vec![2, 1, 0]));
+        run_waksman(Permutation::oneline(vec![1, 2, 0]));
+        run_waksman(Permutation::oneline(vec![0, 2, 1]));
+        run_waksman(Permutation::oneline(vec![2, 0, 1]));
+        // n = 4
+        run_waksman(Permutation::one(4));
+        run_waksman(Permutation::oneline(vec![0, 1, 2, 3]));
+        run_waksman(Permutation::oneline(vec![1, 2, 3, 0]));
+        run_waksman(Permutation::oneline(vec![2, 3, 0, 1]));
+        run_waksman(Permutation::oneline(vec![3, 0, 1, 2]));
+        run_waksman(Permutation::oneline(vec![0, 1, 3, 2]));
+        run_waksman(Permutation::oneline(vec![1, 0, 3, 2]));
+        run_waksman(Permutation::oneline(vec![1, 0, 2, 3]));
+        run_waksman(Permutation::oneline(vec![0, 3, 1, 2]));
+        run_waksman(Permutation::oneline(vec![0, 2, 3, 1]));
+
+        run_waksman(Permutation::one(5));
+        // n = 8
+        run_waksman(Permutation::one(8));
+        run_waksman(Permutation::oneline(vec![0, 2, 3, 4, 6, 1, 5, 7]));
+        // n = 9
+        run_waksman(Permutation::oneline(vec![8, 4, 5, 2, 6, 3, 1, 0, 7]));
+    }
 
     #[test]
     fn test_full_adder() {
