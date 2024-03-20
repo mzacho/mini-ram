@@ -171,12 +171,10 @@ fn switch<T>(b: &mut Builder<T>, x: usize, y: usize, z: usize, one: usize) -> (u
 ///
 /// Input: i, the (index of the) constant holding the 64 bit
 /// instruction.
-///
-/// Returns op, dst, arg0, arg1, arg1 as a word, is_load
 pub fn decode_instr64(
     b: &mut Builder<u64>,
     i: usize,
-) -> (usize, usize, usize, usize, usize, usize, usize) {
+) -> (usize, usize, usize, usize, usize, usize, usize, usize) {
     //b.debug();
     // Destruct instruction into its bit-decomposition
     let i0 = b.decode64(i);
@@ -186,12 +184,14 @@ pub fn decode_instr64(
     let is_load = i0 + 56;
     // next most lsb of op is 1 only for LDR/ STR
     let is_mem = i0 + 57;
+    // op >> 5 is 1 only if op is RET
+    let is_ret = i0 + (56 + 5);
 
     let dst = b.encode4(i0 + 48);
     let arg0 = b.encode4(i0 + 40);
     let arg1 = b.encode4(i0);
     let arg1_word = b.encode32(i0);
-    (op, dst, arg0, arg1, arg1_word, is_mem, is_load)
+    (op, dst, arg0, arg1, arg1_word, is_mem, is_load, is_ret)
 }
 
 #[cfg(test)]

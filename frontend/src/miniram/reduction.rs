@@ -250,7 +250,7 @@ fn fst_trans_circ(
     let instr = b.const_(ARG0);
 
     // Decode it
-    let (op, dst, _, _, arg1_word, is_mem, is_load) = gadgets::decode_instr64(b, instr);
+    let (op, dst, _, _, arg1_word, is_mem, is_load, is_ret) = gadgets::decode_instr64(b, instr);
 
     let is_str = b.xor(&[is_mem, is_load]);
 
@@ -283,8 +283,9 @@ fn fst_trans_circ(
     let tmp = b.xor(&[is_str, one]);
     let check_cfl = b.mul(tmp, check_cfl);
 
-    // Increment pc
-    let pc = one;
+    // Increment pc if op is not RET
+    let tmp = b.sub(one, is_ret);
+    let pc = b.mul(tmp, one);
 
     // Check all in/ out registers except dst are consistent
     let mut regs = vec![(pc, ARG0)];
@@ -331,7 +332,7 @@ fn trans_circ(
     let instr = b.select_const_range(pc, ARG0, ARG0 + l, 1);
 
     // Decode instruction
-    let (op, dst, arg0, arg1, arg1_word, is_mem, is_load) = gadgets::decode_instr64(b, instr);
+    let (op, dst, arg0, arg1, arg1_word, is_mem, is_load, is_ret) = gadgets::decode_instr64(b, instr);
 
     let is_str = b.xor(&[is_mem, is_load]);
 
@@ -364,8 +365,9 @@ fn trans_circ(
     let tmp = b.xor(&[is_str, one]);
     let check_cfl = b.mul(tmp, check_cfl);
 
-    // increment pc
-    let pc = b.add(&[k0 + usize::from(PC), one]);
+    // Increment pc if op is not ret
+    let tmp = b.sub(one, is_ret);
+    let pc = b.add(&[k0 + usize::from(PC), tmp]);
 
     // Check all in/ out registers except dst are consistent
     let mut regs = vec![(pc, k1)];
@@ -434,12 +436,12 @@ fn alu(b: &mut Builder<u64>, in_: AluIn, dst_out: usize, one: usize) -> (usize, 
     let tmp3 = b.mul(in_.cfl_z, tmp2);
     let a24 = b.add(&[tmp1, tmp3]);
 
-    let a28 = in_.arg1; // ret register
-    let a32 = in_.arg1_word; // ret constant
+    let a32 = in_.arg1; // ret register
+    let a36 = in_.arg1_word; // ret constant
 
     // used to trigger a run-time panic if this argument is returned
     // as res. todo: select(in_.op / 4, ids) instead
-    let mut ids = [usize::MAX; 33];
+    let mut ids = [usize::MAX; 37];
     ids[2] = a2;
     ids[3] = a3;
     ids[4] = a4;
@@ -448,8 +450,8 @@ fn alu(b: &mut Builder<u64>, in_: AluIn, dst_out: usize, one: usize) -> (usize, 
     ids[16] = a16;
     ids[20] = a20;
     ids[24] = a24;
-    ids[28] = a28;
     ids[32] = a32;
+    ids[36] = a36;
 
     let res = b.select(in_.op, &ids);
 
@@ -500,11 +502,11 @@ mod test {
     }
 
     #[test]
-    #[ignore]
+    //#[ignore]
     fn long_time_bound() {
         let prog = &const_0();
         let args = vec![];
-        let time_bound = 2;
+        let time_bound = 10;
         let res = convert_and_eval(prog, args, time_bound);
         assert_eq!(vec![0; res.len()], res);
     }
@@ -646,7 +648,7 @@ mod test {
     }
 
     #[test]
-    #[ignore]
+    #[ignore = "program doesn't return 0"]
     fn mov42() {
         let prog = &mov42_ret();
         let args = vec![];

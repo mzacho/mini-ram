@@ -68,7 +68,7 @@ fn encode_instr(i: &Inst) -> EInst64 {
             encode_instr_u64(opcode, dst, arg0, arg1)
         }
         Ret(x) => {
-            let opcode = 0b11100;
+            let opcode = 0b100000;
             let dst = R1; // machine returns in R1
             let arg0 = 0;
             let (arg1, op_offset) = encode_val(x);

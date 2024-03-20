@@ -202,7 +202,7 @@ pub fn interpret(prog: &Prog, args: Vec<Word>, t: usize) -> Res<(Word, Vec<Local
                 set_flags(&mut cfl, v);
                 // machine returns in r1
                 st[1] = v;
-                inc_pc(&mut st);
+                //inc_pc(&mut st);
                 sts.push(record(&st, &cfl, MemAccess::None, sts.len()));
                 break v;
             }
