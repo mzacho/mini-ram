@@ -86,7 +86,7 @@ fn n_values(op: usize) -> usize {
         1
     } else if matches!(
         op,
-        OP_OUT | OP_CHECK_Z | OP_CHECK_EQ | OP_CHECK_AND | OP_CHECK_ALL_EQ_BUT_ONE
+        OP_OUT | OP_CHECK_Z | OP_CHECK_EQ | OP_CHECK_AND | OP_CHECK_ALL_EQ_BUT_ONE | OP_DEBUG
     ) {
         0
     } else if matches!(op, OP_DECODE32) {

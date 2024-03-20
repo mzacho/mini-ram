@@ -39,6 +39,10 @@ impl Builder {
         self.p.push(Inst::Ldr(dst, src));
         self
     }
+    pub fn strr(mut self, dst: Reg, src: Reg) -> Self {
+        self.p.push(Inst::Str(dst, src));
+        self
+    }
 
     pub fn ret_r(mut self, r: Reg) -> Self {
         self.p.push(Inst::Ret(Val::Reg(r)));

@@ -74,6 +74,151 @@ pub fn mov2pow20_ret0() -> Prog {
     Builder::new().mov_c(2, 2u32.pow(20)).ret_r(3).build()
 }
 
+/// MOV r1, 0
+/// STR r1, r1
+/// RET 0
+#[cfg(test)]
+pub fn simple_str0() -> Prog {
+    Builder::new().mov_c(1, 0).strr(1, 1).ret_c(0).build()
+}
+
+/// MOV r1, 1
+/// STR r1, r1
+/// RET 0
+#[cfg(test)]
+pub fn simple_str1() -> Prog {
+    Builder::new().mov_c(1, 1).strr(1, 1).ret_c(0).build()
+}
+
+/// MOV r1, 3
+/// MOV r2, 42
+/// STR r1, r2
+/// LDR r2, r1
+/// RET 0
+#[cfg(test)]
+pub fn str3_42() -> Prog {
+    Builder::new()
+        .mov_c(1, 3)
+        .mov_c(2, 42)
+        .strr(1, 2)
+        .ldr(2, 1)
+        .ret_c(0)
+        .build()
+}
+
+/// MOV r2, 2
+/// STR r2, r2
+/// LDR r2, r2
+/// MOV r1, 1
+/// STR r1, r1
+/// LDR r1, r1
+/// RET 0
+#[cfg(test)]
+pub fn str2_ldr2_str1_ldr1() -> Prog {
+    Builder::new()
+        .mov_c(2, 2)
+        .strr(2, 2)
+        .ldr(2, 2)
+        .mov_c(1, 1)
+        .strr(1, 1)
+        .ldr(1, 1)
+        .ret_c(0)
+        .build()
+}
+
+/// MOV r2, 1
+/// STR r2, r2
+/// LDR r2, r2
+/// MOV r1, 0
+/// STR r1, r1
+/// LDR r1, r1
+/// RET 0
+#[cfg(test)]
+pub fn str1_ldr1_str0_ldr0() -> Prog {
+    Builder::new()
+        .mov_c(2, 1)
+        .strr(2, 2)
+        .ldr(2, 2)
+        .mov_c(1, 0)
+        .strr(1, 1)
+        .ldr(1, 1)
+        .ret_c(0)
+        .build()
+}
+
+/// MOV r2, 1
+/// LDR r2, r2
+/// MOV r1, 0
+/// STR r2, r2
+/// STR r1, r1
+/// LDR r1, r1
+/// RET 0
+#[cfg(test)]
+pub fn str1_str0_ldr1_ldr0() -> Prog {
+    Builder::new()
+        .mov_c(2, 1)
+        .strr(2, 2)
+        .mov_c(1, 0)
+        .strr(1, 1)
+        .ldr(2, 2)
+        .ldr(1, 1)
+        .ret_c(0)
+        .build()
+}
+
+/// MOV r1, 1
+/// MOV r2, 2
+/// STR r1, r3   <-- stores 0 at addr 1
+/// STR r2, r1   <-- stores 1 at addr 2
+/// LDR r4, r2
+/// LDR r4, r4
+/// RET r4
+#[cfg(test)]
+pub fn str1_str2_ldr1_ldr2() -> Prog {
+    Builder::new()
+        .mov_c(1, 1)
+        .mov_c(2, 2)
+        .strr(1, 3)
+        .strr(2, 1)
+        .ldr(4, 2)
+        .ldr(4, 4)
+        .ret_r(4)
+        .build()
+}
+
+#[cfg(test)]
+pub fn str0() -> Prog {
+    Builder::new().mov_c(1, 1).strr(2, 1).ret_c(0).build()
+}
+
+/// MOV r1, 1
+/// STR r1, r1  |
+/// ...         |  n times
+/// STR r1, r1  |
+/// RET 0
+#[cfg(test)]
+pub fn simple_str_n(n: usize) -> Prog {
+    let mut b = Builder::new().mov_c(1, 1);
+    for _ in 0..n {
+        b = b.strr(1, 1)
+    }
+    b.ret_c(0).build()
+}
+
+/// MOV r1, 1
+/// STR r1, r1
+/// LDR r1, r1
+/// RET 0
+#[cfg(test)]
+pub fn simple_ldr() -> Prog {
+    Builder::new()
+        .mov_c(1, 1)
+        .strr(1, 1)
+        .ldr(1, 1)
+        .ret_c(0)
+        .build()
+}
+
 /// MOV r2, 42
 /// MOV r3, r2
 /// ADD r4, r15, r3
@@ -128,6 +273,25 @@ pub fn b_z_skip() -> Prog {
         .mov_c(4, 0)
         .b_z(2)
         .mov_c(3, 42)
+        .ret_c(0)
+        .build()
+}
+
+#[cfg(test)]
+pub fn ldr_2_args() -> Prog {
+    let x = R1;
+    let y = R2;
+    let z = R1;
+
+    Builder::new()
+        //  fetch args from memory
+        .mov_c(x, 0)
+        .ldr(x, x)
+        .mov_c(y, 1)
+        .ldr(y, y)
+        // .mov_c(z, 2)
+        // .ldr(z, z)
+        //  move one to tmp register
         .ret_c(0)
         .build()
 }

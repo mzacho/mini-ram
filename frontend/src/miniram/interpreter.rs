@@ -17,7 +17,7 @@ pub type LocalState = (Store, Cflags);
 
 /// Local state augmented with information on whether the current
 /// instruction needs memory access
-#[derive(PartialEq, Eq, Clone, Copy)]
+#[derive(PartialEq, Eq, Clone, Copy, Debug)]
 pub struct LocalStateAug {
     pub st: LocalState,
     pub ma: MemAccess,
@@ -96,7 +96,7 @@ impl PartialOrd for LocalStateAug {
     }
 }
 
-#[derive(PartialEq, Eq, Clone, Copy)]
+#[derive(PartialEq, Eq, Clone, Copy, Debug)]
 pub enum MemAccess {
     None,
     Read { addr: Word, val: Word },
@@ -117,7 +117,7 @@ pub fn interpret(prog: &Prog, args: Vec<Word>, t: usize) -> Res<(Word, Vec<Local
     let pc = usize::from(PC);
     let mut i = fetch(prog, st[pc])?;
     let res = loop {
-        dbg!(&st, &cfl, i);
+        // dbg!(&st, &cfl, i);
         let ma = match *i {
             // Inst::AND(dst, x, y) => {
             //     let v = st[x] ^ st[y];
@@ -171,9 +171,9 @@ pub fn interpret(prog: &Prog, args: Vec<Word>, t: usize) -> Res<(Word, Vec<Local
                 let src = usize::from(src);
                 let addr = st[dst];
                 let val = st[src];
-                set_flags(&mut cfl, addr);
+                //set_flags(&mut cfl, addr);
                 mem.insert(addr, val);
-                MemAccess::Read { addr, val }
+                MemAccess::Write { addr, val }
             }
             Inst::B(cond, r) => {
                 let pc_ = match cond {
@@ -215,7 +215,7 @@ pub fn interpret(prog: &Prog, args: Vec<Word>, t: usize) -> Res<(Word, Vec<Local
         }
     };
 
-    dbg!(&st, &cfl);
+    // dbg!(&st, &cfl);
     Ok((res, sts))
 }
 

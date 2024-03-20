@@ -7,6 +7,17 @@ use permutation::Permutation;
 /// A setting of switches of the AS-Waksman network
 pub type Config = Vec<bool>;
 
+/// The number of bits required to configure a Waksman network of
+/// size n: sum {i=1..n} ceil(log2(i))
+pub fn conf_len(n: usize) -> usize {
+    let n = i64::try_from(n).unwrap();
+    let mut res = 0;
+    for i in 1..n {
+        res += i.ilog2() + 1
+    }
+    usize::try_from(res).unwrap()
+}
+
 /// Solves the routing problem: Given a permutation p, compute
 /// settings for all switches of the AS-Waksman network with size
 /// p.len(), such that the network computes p.
@@ -41,13 +52,13 @@ type Graph = UndirectedCsrGraph<usize>;
 /// Assumes p.len() >= 4.
 pub fn route_(p: &Permutation) -> Config {
     let n = p.len();
-    let even = n.is_power_of_two();
+    let even = n % 2 == 0;
     // Constraints for input layer
     let start_in = if even { 0 } else { 1 };
     let in_edges = (start_in..n).step_by(2).map(|i| (i, i + 1));
 
     // Constraints for output layer
-    let start_out = if even { 2 } else { 1 };
+    let start_out = if even { 2 } else { 1 }; // 2, 4,
     let out_edges = (start_out..n)
         .step_by(2)
         .map(|i| (p.apply_idx(i), p.apply_idx(i + 1)));
@@ -210,7 +221,16 @@ mod tests {
         let p = &Permutation::one(4);
         let _ = route(p);
 
+        let p = &Permutation::one(6);
+        let _ = route(p);
+
+        let p = &Permutation::one(8);
+        let _ = route(p);
+
         let p = &Permutation::one(16);
+        let _ = route(p);
+
+        let p = &Permutation::one(42);
         let _ = route(p);
     }
 
@@ -252,6 +272,5 @@ mod tests {
         clr.insert(4, true);
         color(g, clr);
         assert_coloring(g, clr);
-        dbg!(clr);
     }
 }

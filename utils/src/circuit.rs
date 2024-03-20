@@ -49,7 +49,7 @@ use builder::Res as Circuit;
 
 /// Evaluate a circuit of u64 values
 pub fn eval64(c: &Circuit<u64>, mut wires: Vec<u64>) -> Vec<u64> {
-    dbg!(c);
+    // dbg!(c);
     let gates = &c.gates;
     let consts = &c.consts;
     let n_gates = c.n_gates;
@@ -109,16 +109,16 @@ pub fn eval64(c: &Circuit<u64>, mut wires: Vec<u64>) -> Vec<u64> {
                 // outw: x - y
                 let lhs = wires[gates[i] - ARG0];
                 let rhs = wires[gates[i + 1] - ARG0];
+                dbg!(lhs, rhs);
                 res = lhs.wrapping_sub(rhs);
                 i += 2;
             }
             OP_MUL => {
                 // args: idx, idy
                 // outw: x * y
-                dbg!(gates[i] - ARG0);
-                dbg!(gates[i + 1] - ARG0);
                 let lhs = wires[gates[i] - ARG0];
                 let rhs = wires[gates[i + 1] - ARG0];
+                dbg!(lhs, rhs);
                 res = lhs.wrapping_mul(rhs);
                 i += 2;
             }
@@ -135,7 +135,7 @@ pub fn eval64(c: &Circuit<u64>, mut wires: Vec<u64>) -> Vec<u64> {
                 // outw: xi
                 let i_ = wires[gates[i] - ARG0];
                 let i_: usize = i_.try_into().ok().unwrap();
-                //dbg!(i_, gates[i] - ARG0);
+                dbg!(i_);
                 i += i_ + 1;
                 res = wires[gates[i] - ARG0];
                 while gates[i] >= ARG0 {
@@ -164,6 +164,7 @@ pub fn eval64(c: &Circuit<u64>, mut wires: Vec<u64>) -> Vec<u64> {
                 // outw: idx1, idx2, ..., idxn s.t sum 2^{i-1}*xi
                 let mut x = wires[gates[i] - ARG0];
                 u32::try_from(x).unwrap();
+                dbg!(x);
                 for _ in 1..32 {
                     res = u64::from(x.trailing_ones() > 0);
                     wires.push(res);
@@ -175,8 +176,8 @@ pub fn eval64(c: &Circuit<u64>, mut wires: Vec<u64>) -> Vec<u64> {
             OP_DECODE64 => {
                 // args: x where x < 2^64
                 // outw: idx1, idx2, ..., idxn s.t sum 2^{i-1}*xi
-                dbg!(i, gates[i] - ARG0);
                 let mut x = wires[gates[i] - ARG0];
+                dbg!(x);
                 for _ in 1..64 {
                     res = u64::from(x.trailing_ones() > 0);
                     wires.push(res);
@@ -259,7 +260,7 @@ pub fn eval64(c: &Circuit<u64>, mut wires: Vec<u64>) -> Vec<u64> {
                 // asserts: xj = yj for j != i
                 let mut res_ = true;
                 let mut i_ = wires[gates[i] - ARG0];
-                dbg!(i_);
+                // dbg!(i_);
                 i += 1;
                 while gates[i] > ARG0 {
                     if i_ == 0 {
@@ -269,7 +270,7 @@ pub fn eval64(c: &Circuit<u64>, mut wires: Vec<u64>) -> Vec<u64> {
                     }
                     let x = wires[gates[i] - ARG0];
                     let y = wires[gates[i + 1] - ARG0];
-                    dbg!(x, y, i, gates[i], gates[i + 1]);
+                    // dbg!(x, y, i, gates[i], gates[i + 1]);
                     res_ &= x == y;
                     i += 2;
                     i_ -= 1;
@@ -283,10 +284,10 @@ pub fn eval64(c: &Circuit<u64>, mut wires: Vec<u64>) -> Vec<u64> {
             _ => panic!("invalid operation"),
         }
         if (op != OP_OUT) & !is_check(op) & !matches!(op, OP_DEBUG) {
-            dbg!(res);
+            // dbg!(res);
             wires.push(res);
         }
-        dbg!(&wires);
+        // dbg!(&wires);
     }
     pp::print(c, Some(&wires));
     out
@@ -314,7 +315,6 @@ pub fn count_out(gates: &[usize]) -> usize {
     res
 }
 
-#[cfg(test)]
 /// Counts number of mul or and gates
 pub fn count_mul(gates: &[usize]) -> usize {
     let mut res = 0;

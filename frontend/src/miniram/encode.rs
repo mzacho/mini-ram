@@ -16,44 +16,49 @@ pub fn encode(p: &Prog) -> EProg {
 fn encode_instr(i: &Inst) -> EInst64 {
     match i {
         Add(x, y, z) => {
-            let opcode = 0b10;
-            let dst = encode_reg(x);
-            let arg0 = encode_reg(y);
-            let arg1 = u32::from(encode_reg(z));
-            encode_instr_u64(opcode, dst, arg0, arg1)
-        }
-        Sub(x, y, z) => {
             let opcode = 0b100;
             let dst = encode_reg(x);
             let arg0 = encode_reg(y);
             let arg1 = u32::from(encode_reg(z));
             encode_instr_u64(opcode, dst, arg0, arg1)
         }
+        Sub(x, y, z) => {
+            let opcode = 0b1000;
+            let dst = encode_reg(x);
+            let arg0 = encode_reg(y);
+            let arg1 = u32::from(encode_reg(z));
+            encode_instr_u64(opcode, dst, arg0, arg1)
+        }
         Mov(x, y) => {
-            let opcode = 0b110;
+            let opcode = 0b1100;
             let dst = encode_reg(x);
             let arg0 = 0;
             let (arg1, op_offset) = encode_val(y);
             encode_instr_u64(opcode + op_offset, dst, arg0, arg1)
         }
         Ldr(dst, src) => {
-            let opcode = 1;
+            let opcode = 0b11;
             let dst = encode_reg(dst);
             let arg0 = encode_reg(src);
             let arg1 = 0;
             encode_instr_u64(opcode, dst, arg0, arg1)
         }
         Str(dst, src) => {
-            let opcode = 0;
+            let opcode = 0b10;
             let dst = encode_reg(dst);
             let arg0 = encode_reg(src);
             let arg1 = 0;
-            encode_instr_u64(opcode, dst, arg0, arg1)
+            // NOTICE: we encode the register dst, holding the
+            // address to be stored into, in field #3, so fetching the
+            // address is done in the same way for LDR/ STR, in the
+            // memory consistency sub-circuit.
+
+            encode_instr_u64(opcode, arg0, dst, arg1)
         }
         B(x, y) => {
             let opcode = match x {
-                None => 0b1010,
-                Some(Cond::Z) => 0b1100,
+                None => 0b10100,
+                Some(Cond::Z) => 0b11000,
             };
             let dst = PC;
             let arg0 = 0;
@@ -63,7 +68,7 @@ fn encode_instr(i: &Inst) -> EInst64 {
             encode_instr_u64(opcode, dst, arg0, arg1)
         }
         Ret(x) => {
-            let opcode = 0b1110;
+            let opcode = 0b11100;
             let dst = R1; // machine returns in R1
             let arg0 = 0;
             let (arg1, op_offset) = encode_val(x);
@@ -93,7 +98,7 @@ fn encode_val(v: &Val) -> (u32, u8) {
             let r = encode_reg(r);
             (u32::from(r), 0)
         }
-        Val::Const(c) => (*c, 2),
+        Val::Const(c) => (*c, 0b100),
     }
 }
 
@@ -110,7 +115,7 @@ mod tests {
         //          op      dst     arg0    blank                             arg0
         assert_eq!(
             enc,
-            0b0000_0010_0000_0001_0000_0001_0000_0000_0000_0000_0000_0000_0000_0000_0000_0001
+            0b0000_0100_0000_0001_0000_0001_0000_0000_0000_0000_0000_0000_0000_0000_0000_0001
         );
 
         let i = Add(R2, R1, R1);
@@ -118,7 +123,7 @@ mod tests {
         //          op      dst     arg0    blank                             arg0
         assert_eq!(
             enc,
-            0b0000_0010_0000_0010_0000_0001_0000_0000_0000_0000_0000_0000_0000_0000_0000_0001
+            0b0000_0100_0000_0010_0000_0001_0000_0000_0000_0000_0000_0000_0000_0000_0000_0001
         );
 
         let i = Sub(R2, R2, R2);
@@ -126,7 +131,7 @@ mod tests {
         //          op      dst     arg0    blank                             arg0
         assert_eq!(
             enc,
-            0b0000_0100_0000_0010_0000_0010_0000_0000_0000_0000_0000_0000_0000_0000_0000_0010
+            0b0000_1000_0000_0010_0000_0010_0000_0000_0000_0000_0000_0000_0000_0000_0000_0010
         );
     }
 }

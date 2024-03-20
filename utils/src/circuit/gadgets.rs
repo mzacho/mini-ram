@@ -1,5 +1,3 @@
-use crate::circuit::ARG0;
-
 use super::builder::Builder;
 
 pub fn bit_comparator<T>(
@@ -16,17 +14,30 @@ pub fn bit_comparator<T>(
     (x_lt_y, eq, x_gt_y)
 }
 
-pub fn word_comparator<T>(b: &mut Builder<T>, xs: &[usize], ys: &[usize], one: usize) -> usize {
+/// Inputs: x0, .., xn
+///         y0, .., yn
+///
+/// Outputs: x < y, x = y
+///          where x = sum{i=0,..n} xi*2^i
+///                y = sum{i=0,..n} yi*2^i
+pub fn word_comparator<T>(
+    b: &mut Builder<T>,
+    xs: &[usize],
+    ys: &[usize],
+    one: usize,
+) -> (usize, usize) {
     assert_eq!(xs.len(), ys.len());
     assert!(!(xs.is_empty() | ys.is_empty()));
-    let (lt, _, _) = bit_comparator(b, xs[0], ys[0], one);
-    let mut prev = lt;
+    let (lt, eq, _) = bit_comparator(b, xs[0], ys[0], one);
+    let mut prev_lt = lt;
+    let mut prev_eq = eq;
     for i in 1..xs.len() {
         let (lt, eq, _) = bit_comparator(b, xs[i], ys[i], one);
-        let tmp = b.and(eq, prev);
-        prev = b.or(lt, tmp);
+        let tmp = b.and(eq, prev_lt);
+        prev_lt = b.or(lt, tmp);
+        prev_eq = b.and(eq, prev_eq);
     }
-    prev
+    (prev_lt, prev_eq)
 }
 
 pub fn half_adder<T>(b: &mut Builder<T>, x: usize, y: usize) -> (usize, usize) {
@@ -95,7 +106,7 @@ pub fn waksman<T>(
         // When n=2 the network is just a switch
         let (a, b) = switch(b, xs[0], xs[1], conf[0], one);
         (vec![a, b], 1)
-    } else if n.is_power_of_two() {
+    } else if n % 2 == 0 {
         // ids of input wires for next layer
         let mut ys = vec![];
         let mut zs = vec![];
@@ -123,20 +134,16 @@ pub fn waksman<T>(
         // Switches for input layer
         for i in 0..n / 2 {
             let (a, b) = switch(b, xs[2 * i + 1], xs[2 * i + 2], conf[i], one);
-            dbg!(a - ARG0, b - ARG0);
             ys.push(a);
             zs.push(b);
         }
         // Construct sub-networks
         let (ys, c1) = waksman(b, &ys, &conf[n / 2..], one);
-        dbg!(&ys);
         let (zs, c2) = waksman(b, &zs, &conf[n / 2 + c1..], one);
-        dbg!(&zs);
         // switches for output layer
         let mut res = vec![ys[0]];
         for i in 0..n / 2 {
             let (a, b) = switch(b, ys[i + 1], zs[i], conf[n / 2 + c1 + c2 + i], one);
-            dbg!(a - ARG0, b - ARG0);
             res.push(a);
             res.push(b);
         }
@@ -165,25 +172,35 @@ fn switch<T>(b: &mut Builder<T>, x: usize, y: usize, z: usize, one: usize) -> (u
 /// Input: i, the (index of the) constant holding the 64 bit
 /// instruction.
 ///
-/// Returns op, dst, arg0, arg1, arg1 as a word
-pub fn decode_instr64(b: &mut Builder<u64>, i: usize) -> (usize, usize, usize, usize, usize) {
+/// Returns op, dst, arg0, arg1, arg1 as a word, is_load
+pub fn decode_instr64(
+    b: &mut Builder<u64>,
+    i: usize,
+) -> (usize, usize, usize, usize, usize, usize, usize) {
+    //b.debug();
     // Destruct instruction into its bit-decomposition
-    let i1 = b.decode64(i);
+    let i0 = b.decode64(i);
 
-    let op = b.encode8(i1 + 56);
-    let dst = b.encode4(i1 + 48);
-    let arg0 = b.encode4(i1 + 40);
-    let arg1 = b.encode4(i1);
-    let arg1_word = b.encode32(i1);
-    (op, dst, arg0, arg1, arg1_word)
+    let op = b.encode8(i0 + 56);
+    // lsb of op is 1 only for LDR
+    let is_load = i0 + 56;
+    // next most lsb of op is 1 only for LDR/ STR
+    let is_mem = i0 + 57;
+
+    let dst = b.encode4(i0 + 48);
+    let arg0 = b.encode4(i0 + 40);
+    let arg1 = b.encode4(i0);
+    let arg1_word = b.encode32(i0);
+    (op, dst, arg0, arg1, arg1_word, is_mem, is_load)
 }
 
 #[cfg(test)]
 mod tests {
+    use crate::circuit::ARG0;
     use permutation::Permutation;
 
     use crate::circuit::{builder, eval64};
-    use crate::waksman::route;
+    use crate::waksman::{self, route};
 
     use super::*;
 
@@ -199,6 +216,15 @@ mod tests {
         res
     }
 
+    // #[test]
+    // fn enc_dec() {
+    //     let mut b = Builder::new(1);
+    //     let x = b.decode64(ARG0);
+    //     let x0 = b.encode8(x);
+    //     let x1 = b.encode8(x + 8);
+    //     let x1 = b.encode8(x + 16);
+    // }
+
     fn build_bit_comparator(n: usize) -> builder::Res<u64> {
         let n_in = n * 2;
         let mut b = Builder::new(n_in);
@@ -206,8 +232,9 @@ mod tests {
         let one = b.const_(one);
         let xs = &argv(n_in)[..n];
         let ys = &argv(n_in)[n..];
-        let res = word_comparator(&mut b, xs, ys, one);
-        b.build(&[res])
+        let (lt, eq) = word_comparator(&mut b, xs, ys, one);
+        let _ = eq;
+        b.build(&[lt])
     }
 
     #[test]
@@ -286,6 +313,7 @@ mod tests {
 
     /// Generate settings for routing p, and test that routing the
     /// sequential series 0, 1, ..., n yields the result of applying
+    /// p to that series.
     fn run_waksman(p: Permutation) {
         let n = p.len();
         let conf = route(&p);
@@ -337,6 +365,61 @@ mod tests {
         run_waksman(Permutation::oneline(vec![0, 2, 3, 4, 6, 1, 5, 7]));
         // n = 9
         run_waksman(Permutation::oneline(vec![8, 4, 5, 2, 6, 3, 1, 0, 7]));
+    }
+
+    #[test]
+    fn route9() {
+        let conf = vec![
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 1, 1, 1, 1,
+        ];
+
+        let n_in = conf.len() + 9;
+        assert_eq!(conf.len(), waksman::conf_len(9));
+        let mut b = Builder::new(n_in);
+
+        let xs = argv(n_in);
+        let one = b.push_const(1);
+        let one = b.const_(one);
+        let (o, _) = waksman(&mut b, &xs[..9], &xs[9..], one);
+        let c = &b.build(&o);
+        let wires = (0..9).chain(conf);
+
+        let res = eval64(c, wires.collect());
+        assert_eq!(res, vec![0, 8, 1, 2, 3, 4, 5, 6, 7]);
+    }
+
+    #[test]
+    fn cmp_words() {
+        let mut b = Builder::new(2);
+        let one = b.push_const(1);
+        let one = b.const_(one);
+        let x0 = b.decode32(ARG0);
+        let y0 = b.decode32(ARG0 + 1);
+        let xs = &(x0..x0 + 32).collect::<Vec<_>>();
+        let ys = &(y0..y0 + 32).collect::<Vec<_>>();
+        let (lt, eq) = word_comparator(&mut b, xs, ys, one);
+        let c = &b.build(&[lt, eq]);
+
+        let res = eval64(c, vec![0, 1]);
+        assert_eq!(res, vec![1, 0]);
+
+        let res = eval64(c, vec![0, 0]);
+        assert_eq!(res, vec![0, 1]);
+
+        let res = eval64(c, vec![1, 0]);
+        assert_eq!(res, vec![0, 0]);
+
+        let res = eval64(c, vec![1, 1]);
+        assert_eq!(res, vec![0, 1]);
+
+        let res = eval64(c, vec![32, 32]);
+        assert_eq!(res, vec![0, 1]);
+
+        let res = eval64(c, vec![33, 32]);
+        assert_eq!(res, vec![0, 0]);
+
+        let res = eval64(c, vec![24, 32]);
+        assert_eq!(res, vec![1, 0])
     }
 
     #[test]

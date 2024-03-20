@@ -59,7 +59,6 @@ impl<T> Builder<T> {
         }
     }
 
-    #[cfg(test)]
     pub fn validate(&self) {
         assert_eq!(super::count_ops(&self.gates), self.n_gates);
         assert_eq!(super::count_out(&self.gates), self.n_out);
