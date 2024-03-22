@@ -9,12 +9,13 @@ pub fn prove64(c: Circuit<u64>, w: Vec<u64>, mut chan: ProverTcpChannel, _ctx: P
     let n_in = w.len();
     let n_mul = c.n_mul;
     let n_select = c.n_select;
-    let mul_or_select = (n_mul > 0) || n_select > 0;
+    let n_select_const = c.n_select_const;
+    let mul_or_select = (n_mul > 0) || (n_select > 0) || n_select_const > 0;
 
     let segments = &vole::Segments {
         n_in,
-        n_mul: n_mul + n_select * 2,
-        n_mul_check: if mul_or_select { 1 } else { 0 }
+        n_mul: n_mul + n_select * 2 + n_select_const,
+        n_mul_check: if mul_or_select { 1 } else { 0 },
     };
 
     let voles = preprocess_vole(&mut chan, segments);
@@ -32,13 +33,7 @@ pub fn prove64(c: Circuit<u64>, w: Vec<u64>, mut chan: ProverTcpChannel, _ctx: P
         cler: w,
         macs: voles.mc_in,
     };
-    let (outputs, mult_checks) = eval(
-        &c,
-        wires,
-        voles.xs_mul,
-        voles.mc_mul,
-        &mut chan,
-    );
+    let (outputs, mult_checks) = eval(&c, wires, voles.xs_mul, voles.mc_mul, &mut chan);
 
     if (n_mul > 0) | (n_select > 0) {
         let x = chan.recv_challenge();
@@ -91,7 +86,8 @@ fn preprocess_vole(chan: &mut ProverTcpChannel, segs: &vole::Segments) -> vole::
     println!("  Correlations for multiplications:");
     println!("  Received xs={xs_mul:?}, macs={mc_mul:?}");
 
-    let (xs_mul_check, mc_mul_check) = chan.recv_extend_vole_zm(segs.n_mul_check.try_into().unwrap());
+    let (xs_mul_check, mc_mul_check) =
+        chan.recv_extend_vole_zm(segs.n_mul_check.try_into().unwrap());
     println!("  Correlations for multiplication checks:");
     println!("  Received xs={xs_mul_check:?}, macs={mc_mul_check:?}");
 
@@ -305,19 +301,51 @@ fn eval(
             OP_SELECT_CONST => {
                 // args: idi, idc1, idc2, ..., idcn where i <= n
                 // outw: ci
-                todo!()
-                // let i_ = wires.clrr[gates[i] - ARG0];
-                // let it = wires.macs[gates[i] - ARG0];
-                // let i_: usize = i_.try_into().ok().unwrap();
-                // i += i_ + 1;
-                // res_x = consts[gates[i] - ARG0];
-                // res_t = todo!();
-                // while gates[i] >= ARG0 {
-                //     i += 1;
-                //     if i >= gates.len() {
-                //         break;
-                //     }
-                // }
+                let i_ = wires.cler[gates[i] - ARG0];
+                let it = wires.macs[gates[i] - ARG0];
+                let mut iu: usize = i_.try_into().ok().unwrap();
+                i += 1;
+                res_x = consts[gates[i + iu] - ARG0];
+                res_t = 0;
+                let mut bst: u64 = 0;
+                let mut j = 0;
+                while gates[i] >= ARG0 {
+                    let cj = consts[gates[i] - ARG0];
+                    let cjt = 0;
+                    let bj: u64 = if iu == 0 { 1 } else { 0 };
+
+                    // Commit to bj
+                    let bjt = mc_mul[t];
+                    // Send delta
+                    let r = xs_mul[t];
+                    let d = bj.wrapping_sub(xs_mul[t]);
+                    println!("  [select] Sending b{j} delta={d}, r={r}.");
+                    chan.send_delta(d);
+                    // Add tag to sum of bj tags
+                    bst = bst.wrapping_add(bjt);
+                    // Compute tag of bj*cj
+                    let bct = cj.wrapping_mul(bjt);
+                    // Add tag to result
+                    res_t = res_t.wrapping_add(bct);
+
+                    // Prove bj(i_-j) opens to 0
+                    let a0 = bjt.wrapping_mul(it);
+                    let a1 = bjt
+                        .wrapping_mul(i_.wrapping_sub(j))
+                        .wrapping_add(it.wrapping_mul(bj));
+                    a0a1.push((a0, a1));
+
+                    iu = iu.wrapping_sub(1);
+                    t += 1;
+                    j += 1;
+                    i += 1;
+                    if i >= gates.len() {
+                        break;
+                    }
+                }
+                // Prove that sum of bs opens to 1
+                println!("  [select] opening sum bs, bst={bst}");
+                chan.send_mac(bst);
             }
             OP_DECODE32 => {
                 // args: x where x < 2^32

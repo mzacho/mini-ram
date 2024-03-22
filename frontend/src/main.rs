@@ -89,6 +89,11 @@ fn main() {
                                 let w = vec![2, 2, 4];
                                 (c, w)
                             }
+                            "mul_const" => {
+                                let c = circuits::mul_const();
+                                let w = vec![42, 42 * 42];
+                                (c, w)
+                            }
                             "mul_mul_eq" => {
                                 let c = circuits::mul_mul_eq();
                                 let w = vec![2, 2, 7, 28];
@@ -101,7 +106,18 @@ fn main() {
                             }
                             "select_eq" => {
                                 let c = circuits::select_eq();
-                                let w = vec![0, 0, 0];
+                                let w = vec![0, 0, 1];
+                                (c, w)
+                            }
+                            "select_const" => {
+                                let c = circuits::select_const(0, 1);
+                                let w = vec![0];
+                                (c, w)
+                            }
+                            "select_const_vec" => {
+                                let c =
+                circuits::select_const_vec(&[0, 1, 2, 3, 0, 5]);
+                                let w = vec![4];
                                 (c, w)
                             }
                             _ => {

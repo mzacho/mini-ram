@@ -10,12 +10,13 @@ pub fn verify64(c: Circuit<u64>, mut chan: VerifierTcpChannel, mut ctx: ProofCtx
     let n_in = c.n_in;
     let n_mul = c.n_mul;
     let n_select = c.n_select;
-    let mul_or_select = (n_mul > 0) || n_select > 0;
+    let n_select_const = c.n_select_const;
+    let mul_or_select = (n_mul > 0) || (n_select > 0) || (n_select_const > 0);
 
     let segments = &vole::Segments {
         n_in,
-        n_mul: n_mul + n_select * 2,
-        n_mul_check: if mul_or_select { 1} else {0}
+        n_mul: n_mul + n_select * 2 + n_select_const,
+        n_mul_check: if mul_or_select { 1 } else { 0 },
     };
 
     let (delta, mut vole) = preprocess_vole(&mut chan, segments);
@@ -180,7 +181,6 @@ fn eval(
             OP_SELECT => {
                 // args: idi, idx1, idx2, ..., idxn where i <= n
                 // outw: xi
-                let mut kxi: u64 = 0;
                 let mut kbs: u64 = 0;
                 let ki = wires.zm[gates[i] - ARG0];
                 res = 0;
@@ -222,19 +222,37 @@ fn eval(
             OP_SELECT_CONST => {
                 // args: idi, idc1, idc2, ..., idcn where i <= n
                 // outw: ci
-                todo!()
-                // let i_ = wires.clrr[gates[i] - ARG0];
-                // let it = wires.macs[gates[i] - ARG0];
-                // let i_: usize = i_.try_into().ok().unwrap();
-                // i += i_ + 1;
-                // res_x = consts[gates[i] - ARG0];
-                // res_t = todo!();
-                // while gates[i] >= ARG0 {
-                //     i += 1;
-                //     if i >= gates.len() {
-                //         break;
-                //     }
-                // }
+                let mut kbs: u64 = 0;
+                let ki = wires.zm[gates[i] - ARG0];
+                res = 0;
+                i += 1;
+                let mut j: u64 = 0;
+                while gates[i] >= ARG0 {
+                    let cj = consts[gates[i] - ARG0];
+                    let kcj = 0u64.wrapping_sub(delta.wrapping_mul(cj));
+                    let kbj = mul_keys[t];
+                    println!("  [select] Using kb{j}={kbj}");
+                    let kcjbj = cj.wrapping_mul(kbj);
+                    let kj = 0u64.wrapping_sub(delta.wrapping_mul(j));
+
+                    // Verify bj*(i-j) = 0
+                    let b = kbj.wrapping_mul(ki.wrapping_sub(kj));
+                    // let tmp = tmp * x.pow(t)
+                    w = w.wrapping_add(b);
+
+                    res = res.wrapping_add(kcjbj);
+                    kbs = kbs.wrapping_add(kbj);
+                    t += 1;
+                    j += 1;
+                    i += 1;
+                    if i >= gates.len() {
+                        break;
+                    }
+                }
+                // Receive mac of sum bj, assert that it opens to 1
+                let mac = chan.recv_mac();
+                println!("  [select] veriying sum bs, mac={mac}");
+                assert_eq!(mac, kbs.wrapping_add(delta));
             }
             OP_DECODE32 => {
                 // args: x where x < 2^32
@@ -391,7 +409,7 @@ fn preprocess_vole(
     let ks_mul = chan.recv_extend_vole_zm(segs.n_mul.try_into().unwrap());
     println!("  Received ks_mul={ks_mul:?}");
     let ks_mul_check = chan.recv_extend_vole_zm(segs.n_mul_check.try_into().unwrap());
-    println!("  Received ks_select={ks_mul_check:?}");
+    println!("  Received ks_mul_check={ks_mul_check:?}");
 
     (
         delta,

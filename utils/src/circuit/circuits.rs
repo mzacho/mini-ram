@@ -14,6 +14,18 @@ pub fn mul_eq() -> Circuit<u64> {
     b.build(&[sub])
 }
 
+/// A circuit that computes x * 42 - y
+pub fn mul_const() -> Circuit<u64> {
+    let n_in = 2;
+    let x = ARG0;
+    let y = ARG0 + 1;
+    let mut b = Builder::new(n_in);
+    let c = b.push_const(42);
+    let mul = b.mul_const(x, c);
+    let sub = b.sub(mul, y);
+    b.build(&[sub])
+}
+
 /// A circuit that computes x.pow(y) - z,
 /// Assumes 0 <= y < 4
 pub fn pow() -> Circuit<u64> {
@@ -34,7 +46,6 @@ pub fn pow() -> Circuit<u64> {
     let sub = b.sub(mul, z);
     b.build(&[sub])
 }
-
 
 /// A circuit that computes x + y - 42
 pub fn add_eq_42() -> Circuit<u64> {
@@ -83,6 +94,31 @@ pub fn select_eq() -> Circuit<u64> {
     let z = ARG0 + 2;
     let mut b = Builder::new(n_in);
     let select = b.select(x, &[y, z]);
+    b.build(&[select])
+}
+
+
+/// A circuit that computes select_const(i, cs)
+pub fn select_const(c1: u64, c2: u64) -> Circuit<u64> {
+    let n_in = 1;
+    let x = ARG0 + 0;
+    let mut b = Builder::new(n_in);
+    let c1 = b.push_const(c1);
+    let c2 = b.push_const(c2);
+    let select = b.select_const_range(x, c1, c2 + 1, 1);
+    b.build(&[select])
+}
+
+/// A circuit that computes select_const(i, cs)
+pub fn select_const_vec(cs: &[u64]) -> Circuit<u64> {
+    let n_in = 1;
+    let x = ARG0 + 0;
+    let mut b = Builder::new(n_in);
+    let mut ids = vec![];
+    for c in cs {
+        ids.push(b.push_const(*c));
+    }
+    let select = b.select_const_range(x, ids[0], ids[ids.len()-1]+1, 1);
     b.build(&[select])
 }
 

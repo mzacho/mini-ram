@@ -355,6 +355,7 @@ mod tests {
             n_out: 1,
             n_mul: 0,
             n_select: 0,
+            n_select_const: 0,
         };
         let res = eval64(c, wires);
         assert_eq!(*res.last().unwrap(), 42)
@@ -378,6 +379,7 @@ mod tests {
             n_out: 1,
             n_mul: 0,
             n_select: 0,
+            n_select_const: 0,
         };
         let res = eval64(c, wires);
         assert_eq!(*res.last().unwrap(), 42 + 34)
