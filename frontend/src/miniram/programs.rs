@@ -281,7 +281,6 @@ pub fn b_z_skip() -> Prog {
 pub fn ldr_2_args() -> Prog {
     let x = R1;
     let y = R2;
-    let z = R1;
 
     Builder::new()
         //  fetch args from memory

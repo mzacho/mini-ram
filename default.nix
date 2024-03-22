@@ -5,5 +5,6 @@ pkgs.mkShell {
     rustup
     graphviz
     imagemagick
+    protobuf
   ];
 }

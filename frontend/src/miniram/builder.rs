@@ -4,6 +4,7 @@ pub struct Builder {
     p: Prog,
 }
 
+#[allow(dead_code)]
 impl Builder {
     pub fn new() -> Self {
         Builder { p: vec![] }

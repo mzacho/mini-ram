@@ -31,6 +31,7 @@ pub struct Builder<T> {
     n_in: usize,
     n_mul: usize,
     n_out: usize,
+    n_select: usize,
     offset_arg0: bool,
 }
 
@@ -38,10 +39,17 @@ pub struct Builder<T> {
 pub struct Res<T> {
     pub gates: Vec<usize>,
     pub consts: Vec<T>,
+    /// Number of gates
     pub n_gates: usize,
+    /// Number of inputs
     pub n_in: usize,
+    /// Number of mult. gates
     pub n_mul: usize,
+    /// Number of output gates
     pub n_out: usize,
+    /// Number of select alternative (both for normal SELECT gates
+    /// as well as SELECT_CONST gates)
+    pub n_select: usize,
 }
 
 impl<T> Builder<T> {
@@ -55,6 +63,7 @@ impl<T> Builder<T> {
             n_in,
             n_mul: 0,
             n_out: 0,
+            n_select: 0,
             offset_arg0: false,
         }
     }
@@ -166,6 +175,7 @@ impl<T> Builder<T> {
         self.gates.push(i);
         for id in ids {
             self.gates.push(*id);
+            self.n_select += 1;
         }
         self.n_gates += 1;
         self.cursor_wires += 1;
@@ -204,6 +214,7 @@ impl<T> Builder<T> {
         self.gates.push(i);
         for id in (from..to).step_by(step) {
             self.gates.push(id);
+            self.n_select += 1;
         }
         self.n_gates += 1;
         self.cursor_wires += 1;
@@ -378,6 +389,7 @@ impl<T> Builder<T> {
             n_out: self.n_out,
             n_in: self.n_in,
             n_mul: self.n_mul,
+            n_select: self.n_select,
         }
     }
 }

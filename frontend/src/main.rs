@@ -16,6 +16,7 @@ use runners::run_vole;
 use std::env;
 use std::process::exit;
 
+use backend::ProofCtx;
 use utils::circuit::circuits;
 
 use crate::miniram::programs;
@@ -24,10 +25,6 @@ use crate::miniram::reduction::generate_circuit;
 
 const PROGRAM_DESC: &str = "VOLE-based ZK proof of correct MiniRAM executions";
 const PROGRAM_NAME: &str = "miniram-zk";
-
-pub struct ProofCtx {
-    //rng: dyn Rng
-}
 
 /// Options:
 ///  -p, --party:
@@ -48,7 +45,14 @@ fn main() {
             circuit,
         }) => {
             println!("Successfully parsed args");
-            let ctx = ProofCtx {};
+
+            let deterministic = true;
+            let ctx = if deterministic {
+                ProofCtx::new_deterministic()
+            } else {
+                ProofCtx::new_random()
+            };
+
             match party.as_str() {
                 "prover" | "verifier" => {
                     assert!(port_vole.is_some());
@@ -70,9 +74,34 @@ fn main() {
                         }
                     } else if let Some(circuit) = circuit {
                         match circuit.as_str() {
+                            "add_eq_42" => {
+                                let c = circuits::add_eq_42();
+                                let w = vec![21, 21];
+                                (c, w)
+                            }
+                            "add_eq" => {
+                                let c = circuits::add_eq();
+                                let w = vec![21, 21, 42];
+                                (c, w)
+                            }
                             "mul_eq" => {
                                 let c = circuits::mul_eq();
                                 let w = vec![2, 2, 4];
+                                (c, w)
+                            }
+                            "mul_mul_eq" => {
+                                let c = circuits::mul_mul_eq();
+                                let w = vec![2, 2, 7, 28];
+                                (c, w)
+                            }
+                            "pow_eq" => {
+                                let c = circuits::pow();
+                                let w = vec![2, 3, 8];
+                                (c, w)
+                            }
+                            "select_eq" => {
+                                let c = circuits::select_eq();
+                                let w = vec![0, 0, 0];
                                 (c, w)
                             }
                             _ => {
@@ -128,7 +157,7 @@ fn parse(input: std::env::Args) -> Result<ParseRes, ArgsError> {
     args.option(
         "",
         "port",
-        "Port of the prover running on localhost",
+        "Port of the prover on localhost",
         "PROVER_PORT",
         Occur::Req,
         None,

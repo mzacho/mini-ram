@@ -71,31 +71,17 @@ fn convert_localstates(lsts: Vec<LocalStateAug>) -> Witness {
             res.push(u64::from(flag))
         }
     }
-
     // Compute the permutation that sorts the states according to
     // memory accesses.
     let p = permutation::sort(&lsts);
-
-    dbg!(&lsts);
-    dbg!(&p.apply_slice(&lsts));
-
-    // // Push sorted local states
-    // for s in p.apply_slice(&lsts) {
-    //     res.push(s.step);
-    //     let (addr, val, is_load) = match s.ma {
-    //         MemAccess::None => (0, 0, 0),
-    //         MemAccess::Read { addr, val } => (addr, val, 1),
-    //         MemAccess::Write { addr, val } => (addr, val, 0),
-    //     };
-    //     res.push(u64::from(addr));
-    //     res.push(u64::from(val));
-    //     res.push(is_load);
-    // }
 
     // Push configuration of permutation network
     for c in waksman::route(&p.inverse()) {
         res.push(u64::from(c));
     }
+
+    // dbg!(&lsts);
+    // dbg!(&p.apply_slice(&lsts));
     res
 }
 
@@ -332,7 +318,8 @@ fn trans_circ(
     let instr = b.select_const_range(pc, ARG0, ARG0 + l, 1);
 
     // Decode instruction
-    let (op, dst, arg0, arg1, arg1_word, is_mem, is_load, is_ret) = gadgets::decode_instr64(b, instr);
+    let (op, dst, arg0, arg1, arg1_word, is_mem, is_load, is_ret) =
+        gadgets::decode_instr64(b, instr);
 
     let is_str = b.xor(&[is_mem, is_load]);
 

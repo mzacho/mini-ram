@@ -211,7 +211,7 @@ mod tests {
     fn argv(argc: usize) -> Vec<usize> {
         let mut res = vec![];
         for i in 0..argc {
-            res.push(ARG0 + i)
+            res.push(arg(i))
         }
         res
     }
