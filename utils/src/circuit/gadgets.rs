@@ -6,11 +6,11 @@ pub fn bit_comparator<T>(
     y: usize,
     one: usize,
 ) -> (usize, usize, usize) {
-    let x_neg = b.xor(&[x, one]);
-    let y_neg = b.xor(&[y, one]);
-    let x_lt_y = b.and(x_neg, y);
-    let x_gt_y = b.and(y_neg, x);
-    let eq = b.xor(&[x_lt_y, x_gt_y, one]);
+    let x_neg = b.xor_bits(&[x, one]);
+    let y_neg = b.xor_bits(&[y, one]);
+    let x_lt_y = b.and_bits(x_neg, y);
+    let x_gt_y = b.and_bits(y_neg, x);
+    let eq = b.xor_bits(&[x_lt_y, x_gt_y, one]);
     (x_lt_y, eq, x_gt_y)
 }
 
@@ -33,23 +33,23 @@ pub fn word_comparator<T>(
     let mut prev_eq = eq;
     for i in 1..xs.len() {
         let (lt, eq, _) = bit_comparator(b, xs[i], ys[i], one);
-        let tmp = b.and(eq, prev_lt);
-        prev_lt = b.or(lt, tmp);
-        prev_eq = b.and(eq, prev_eq);
+        let tmp = b.and_bits(eq, prev_lt);
+        prev_lt = b.or_bits(lt, tmp);
+        prev_eq = b.and_bits(eq, prev_eq);
     }
     (prev_lt, prev_eq)
 }
 
 pub fn half_adder<T>(b: &mut Builder<T>, x: usize, y: usize) -> (usize, usize) {
-    let sum = b.xor(&[x, y]);
-    let carry = b.and(x, y);
+    let sum = b.xor_bits(&[x, y]);
+    let carry = b.and_bits(x, y);
     (carry, sum)
 }
 
 pub fn full_adder<T>(b: &mut Builder<T>, x: usize, y: usize, carry: usize) -> (usize, usize) {
     let (carry1, sum) = half_adder(b, x, y);
     let (carry2, sum) = half_adder(b, sum, carry);
-    let carry = b.or(carry1, carry2);
+    let carry = b.or_bits(carry1, carry2);
     (carry, sum)
 }
 

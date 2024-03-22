@@ -398,7 +398,7 @@ mod tests {
         let x = ARG0;
         let mut b = Builder::new(1);
         let x1 = b.decode64(x);
-        let out = b.xor(&(x1..x1 + 32).collect::<Vec<usize>>());
+        let out = b.xor_bits(&(x1..x1 + 32).collect::<Vec<usize>>());
         let c = &b.build(&[out]);
 
         let wires = vec![0b1001010];
@@ -438,6 +438,19 @@ mod tests {
         let g = &b.build(&[o]);
         let res = eval64(g, vec![0]);
         assert_eq!(res, vec![42]);
+    }
+
+    #[test]
+    fn aritmetic_xor() {
+        let mut b = Builder::<u64>::new(2);
+        b.disable_z2_ops();
+        let z = b.xor_bits(&[ARG0, ARG0 + 1]);
+        let c = &b.build(&[z]);
+
+        assert_eq!(eval64(c, vec![0, 0]), vec![0]);
+        assert_eq!(eval64(c, vec![0, 1]), vec![1]);
+        assert_eq!(eval64(c, vec![1, 0]), vec![1]);
+        assert_eq!(eval64(c, vec![1, 1]), vec![0]);
     }
 
     // #[test]

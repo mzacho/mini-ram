@@ -37,6 +37,7 @@ pub struct Builder<T> {
     n_decode64: usize,
     n_check_all_eq_but_one: usize,
     offset_arg0: bool,
+    enable_z2_ops: bool,
 }
 
 #[derive(Debug)]
@@ -80,6 +81,7 @@ impl<T> Builder<T> {
             n_decode64: 0,
             n_check_all_eq_but_one: 0,
             offset_arg0: false,
+            enable_z2_ops: false,
         }
     }
 
@@ -91,31 +93,51 @@ impl<T> Builder<T> {
 
     // --- binary ops
 
-    pub fn xor(&mut self, ids: &[usize]) -> usize {
+    pub fn xor_bits(&mut self, ids: &[usize]) -> usize {
         #[cfg(test)]
         self.validate();
-        self.gates.push(OP_XOR);
-        for id in ids {
-            self.gates.push(*id);
+        assert!(ids.len() > 1);
+        if self.enable_z2_ops {
+            self.gates.push(OP_XOR);
+            for id in ids {
+                self.gates.push(*id);
+            }
+            self.n_gates += 1;
+            self.cursor_wires += 1;
+            return self.cursor_wires - 1;
         }
-        self.n_gates += 1;
-        self.cursor_wires += 1;
-        self.cursor_wires - 1
+        // arithmetic xor, assuming ids are all bits
+        let x = ids[0];
+        let y = if ids.len() == 2 {
+            ids[1]
+        } else {
+            self.xor_bits(&ids[1..])
+        };
+        let xy = self.mul(x, y);
+        // could optimize this with mul. const, but I don't want to
+        // add a bunch of constant 2's to the circuit here..
+        let xy2 = self.add(&[xy, xy]);
+        let sum = self.add(&[x, y]);
+        self.sub(sum, xy2)
     }
 
-    pub fn and(&mut self, x: usize, y: usize) -> usize {
+    pub fn and_bits(&mut self, x: usize, y: usize) -> usize {
         #[cfg(test)]
         self.validate();
-        self.gates.push(OP_AND);
-        self.gates.push(x);
-        self.gates.push(y);
-        self.n_gates += 1;
-        self.n_mul += 1;
-        self.cursor_wires += 1;
-        self.cursor_wires - 1
+        if self.enable_z2_ops {
+            self.gates.push(OP_AND);
+            self.gates.push(x);
+            self.gates.push(y);
+            self.n_gates += 1;
+            self.n_mul += 1;
+            self.cursor_wires += 1;
+            self.cursor_wires - 1
+        } else {
+            self.mul(x, y)
+        }
     }
 
-    pub fn and_const(&mut self, c: usize, x: usize) -> usize {
+    pub fn bit_and_const(&mut self, c: usize, x: usize) -> usize {
         #[cfg(test)]
         self.validate();
         self.gates.push(OP_AND_CONST);
@@ -123,16 +145,17 @@ impl<T> Builder<T> {
         self.gates.push(x);
         self.n_gates += 1;
         self.cursor_wires += 1;
-        self.cursor_wires - 1
+        let _ = self.cursor_wires - 1;
+        panic!("deprecated")
     }
 
     // convenience
-    pub fn or(&mut self, x: usize, y: usize) -> usize {
+    pub fn or_bits(&mut self, x: usize, y: usize) -> usize {
         #[cfg(test)]
         self.validate();
-        let xor = self.xor(&[x, y]);
-        let and = self.and(x, y);
-        self.xor(&[xor, and])
+        let xor = self.xor_bits(&[x, y]);
+        let and = self.and_bits(x, y);
+        self.xor_bits(&[xor, and])
     }
 
     // --- arithmetic ops
@@ -420,5 +443,9 @@ impl<T> Builder<T> {
             n_decode64: self.n_decode64,
             n_check_all_eq_but_one: self.n_check_all_eq_but_one,
         }
+    }
+
+    pub fn disable_z2_ops(&mut self) {
+        self.enable_z2_ops = false;
     }
 }

@@ -204,9 +204,9 @@ fn mem_consistency_circ(
     let ys = &(t2_bits..t2_bits + 32).collect::<Vec<_>>();
     let (t_lt, _) = gadgets::word_comparator(b, xs, ys, one);
 
-    let tmp = b.and(adr_eq, t_lt);
-    let tmp = b.or(adr_lt, tmp);
-    let check_sorted = b.xor(&[tmp, one]);
+    let tmp = b.and_bits(adr_eq, t_lt);
+    let tmp = b.or_bits(adr_lt, tmp);
+    let check_sorted = b.xor_bits(&[tmp, one]);
 
     let tmp = b.sub(v1, v2);
     let tmp = b.mul(is_load2, tmp);
@@ -238,7 +238,7 @@ fn fst_trans_circ(
     // Decode it
     let (op, dst, _, _, arg1_word, is_mem, is_load, is_ret) = gadgets::decode_instr64(b, instr);
 
-    let is_str = b.xor(&[is_mem, is_load]);
+    let is_str = b.xor_bits(&[is_mem, is_load]);
 
     // Get output value of dst register, used for mocking the result
     // of memory operations for ALU sub-circuit, and getting the
@@ -266,7 +266,7 @@ fn fst_trans_circ(
     let check_cfl = b.sub(z, cfl_out);
 
     // Conditional flag isn't set when op is STR
-    let tmp = b.xor(&[is_str, one]);
+    let tmp = b.xor_bits(&[is_str, one]);
     let check_cfl = b.mul(tmp, check_cfl);
 
     // Increment pc if op is not RET
@@ -321,7 +321,7 @@ fn trans_circ(
     let (op, dst, arg0, arg1, arg1_word, is_mem, is_load, is_ret) =
         gadgets::decode_instr64(b, instr);
 
-    let is_str = b.xor(&[is_mem, is_load]);
+    let is_str = b.xor_bits(&[is_mem, is_load]);
 
     // Get value of registers refered to by dst, arg0 and arg1 as
     // well as value of Z flag
@@ -349,7 +349,7 @@ fn trans_circ(
     let check_cfl = b.sub(z, cfl_z_out);
 
     // Conditional flag isn't set when op is STR
-    let tmp = b.xor(&[is_str, one]);
+    let tmp = b.xor_bits(&[is_str, one]);
     let check_cfl = b.mul(tmp, check_cfl);
 
     // Increment pc if op is not ret
@@ -446,11 +446,11 @@ fn alu(b: &mut Builder<u64>, in_: AluIn, dst_out: usize, one: usize) -> (usize, 
     // bit-decomposition, converting each bit to Z2, OR-ing them
     // all together and negating the ouput.
     let decode_res = b.decode32(res);
-    let mut tmp = b.or(decode_res, decode_res + 1); // todo: a2b?
+    let mut tmp = b.or_bits(decode_res, decode_res + 1); // todo: a2b?
     for i in 2..32 {
-        tmp = b.or(tmp, decode_res + i)
+        tmp = b.or_bits(tmp, decode_res + i)
     }
-    let z = b.xor(&[tmp, one]);
+    let z = b.xor_bits(&[tmp, one]);
     (res, z)
 }
 
