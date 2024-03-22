@@ -10,12 +10,25 @@ pub fn prove64(c: Circuit<u64>, w: Vec<u64>, mut chan: ProverTcpChannel, _ctx: P
     let n_mul = c.n_mul;
     let n_select = c.n_select;
     let n_select_const = c.n_select_const;
-    let mul_or_select = (n_mul > 0) || (n_select > 0) || n_select_const > 0;
+    let n_decode32 = c.n_decode32;
+    let n_decode64 = c.n_decode64;
+    let n_check_all_eq_but_one = c.n_check_all_eq_but_one;
+    let check_mul = (n_mul > 0)
+        || (n_select > 0)
+        || (n_select_const > 0)
+        || (n_decode32 > 0)
+        || (n_decode64 > 0)
+        || (n_check_all_eq_but_one > 0);
 
     let segments = &vole::Segments {
         n_in,
-        n_mul: n_mul + n_select * 2 + n_select_const,
-        n_mul_check: if mul_or_select { 1 } else { 0 },
+        n_mul: n_mul
+            + n_select * 2
+            + n_select_const
+            + n_decode32 * 32
+            + n_decode64 * 64
+            + n_check_all_eq_but_one,
+        n_mul_check: if check_mul { 1 } else { 0 },
     };
 
     let voles = preprocess_vole(&mut chan, segments);
@@ -35,7 +48,7 @@ pub fn prove64(c: Circuit<u64>, w: Vec<u64>, mut chan: ProverTcpChannel, _ctx: P
     };
     let (outputs, mult_checks) = eval(&c, wires, voles.xs_mul, voles.mc_mul, &mut chan);
 
-    if (n_mul > 0) | (n_select > 0) {
+    if check_mul {
         let x = chan.recv_challenge();
         println!("Received challenge {x}");
 
@@ -257,7 +270,6 @@ fn eval(
                     // Send delta
                     let r = xs_mul[t];
                     let d = bj.wrapping_sub(xs_mul[t]);
-                    println!("  [select] Sending b{j} delta={d}, r={r}.");
                     chan.send_delta(d);
                     // Add tag to sum of bj tags
                     bst = bst.wrapping_add(bjt);
@@ -266,11 +278,9 @@ fn eval(
                     // Send delta
                     let r = xs_mul[t + 1];
                     let d = (bj * xj).wrapping_sub(xs_mul[t + 1]);
-                    println!("  [select] Sending b{j}x{j} delta={d}, r={r}");
                     chan.send_delta(d);
                     // Add tag to result
                     res_t = res_t.wrapping_add(bxt);
-
                     // Prove bj(i_-j) opens to 0
                     let a0 = bjt.wrapping_mul(it);
                     let a1 = bjt
@@ -350,67 +360,126 @@ fn eval(
             OP_DECODE32 => {
                 // args: x where x < 2^32
                 // outw: idx1, idx2, ..., idxn s.t sum 2^{i-1}*xi
-                todo!()
-                // let mut x = clr_w[gates[i] - ARG0];
-                // u32::try_from(x).unwrap();
-                // //dbg!(x);
-                // for _ in 1..32 {
-                //     res = u64::from(x.trailing_ones() > 0);
-                //     clr_w.push(res);
-                //     x >>= 1;
-                // }
-                // res = u64::from(x.trailing_ones() > 0);
-                // i += 1;
+                let mut x = wires.cler[gates[i] - ARG0];
+                let xt = wires.macs[gates[i] - ARG0];
+                u32::try_from(x).unwrap();
+                let mut sum: u64 = 0;
+                for i in 0..32 {
+                    let xi = u64::from(x.trailing_ones() > 0);
+                    // Commit to xi
+                    let xit = mc_mul[t];
+                    // Send delta
+                    let d = xi.wrapping_sub(xs_mul[t]);
+                    chan.send_delta(d);
+                    // Prove xi(1-xi) opens to 0
+                    let a0 = xit.wrapping_mul(0u64.wrapping_sub(xit));
+                    let a1 = xit
+                        .wrapping_mul(1u64.wrapping_sub(xi))
+                        .wrapping_add(0u64.wrapping_sub(xit).wrapping_mul(xi));
+                    a0a1.push((a0, a1));
+
+                    sum = sum.wrapping_add(2u64.pow(i).wrapping_mul(xit));
+
+                    if i != 31 {
+                        wires.cler.push(xi);
+                        wires.macs.push(xit);
+                        x >>= 1;
+                        t += 1;
+                    } else {
+                        res_x = xi;
+                        res_t = xit;
+                        t += 1;
+                    }
+                }
+                // Prove pow sum opens to x
+                chan.send_mac(sum.wrapping_sub(xt));
+                i += 1;
             }
             OP_DECODE64 => {
                 // args: x where x < 2^64
                 // outw: idx1, idx2, ..., idxn s.t sum 2^{i-1}*xi
-                todo!()
-                // let mut x = clr_w[gates[i] - ARG0];
-                // //dbg!(x);
-                // for _ in 1..64 {
-                //     res = u64::from(x.trailing_ones() > 0);
-                //     clr_w.push(res);
-                //     x >>= 1;
-                // }
-                // res = u64::from(x.trailing_ones() > 0);
-                // i += 1;
+                let mut x = wires.cler[gates[i] - ARG0];
+                let xt = wires.macs[gates[i] - ARG0];
+                u32::try_from(x).unwrap();
+                let mut sum: u64 = 0;
+                for i in 0..64 {
+                    let xi = u64::from(x.trailing_ones() > 0);
+                    // Commit to xi
+                    let xit = mc_mul[t];
+                    // Send delta
+                    let d = xi.wrapping_sub(xs_mul[t]);
+                    chan.send_delta(d);
+                    // Prove xi(1-xi) opens to 0
+                    let a0 = xit.wrapping_mul(0u64.wrapping_sub(xit));
+                    let a1 = xit
+                        .wrapping_mul(1u64.wrapping_sub(xi))
+                        .wrapping_add(0u64.wrapping_sub(xit).wrapping_mul(xi));
+                    a0a1.push((a0, a1));
+
+                    sum = sum.wrapping_add(2u64.pow(i).wrapping_mul(xit));
+
+                    if i != 63 {
+                        wires.cler.push(xi);
+                        wires.macs.push(xit);
+                        x >>= 1;
+                        t += 1;
+                    } else {
+                        res_x = xi;
+                        res_t = xit;
+                        t += 1;
+                    }
+                }
+                // Prove pow sum opens to x
+                chan.send_mac(sum.wrapping_sub(xt));
+                i += 1;
             }
             OP_ENCODE4 => {
                 // args: idx1, idx2, idx3, idx4
                 // outw: sum 2^{i-1}*xi
                 //
-                // assumse xs are all bits so no overflow happens.
-                todo!()
-                // for k in 0..4 {
-                //     let xk = clr_w[gates[i] - ARG0];
-                //     res += 2u64.pow(k) * xk;
-                //     i += 1;
-                // }
+                // assumes xs are all bits so no overflow happens.
+                res_x = 0;
+                res_t = 0;
+                for k in 0..4 {
+                    let x = wires.cler[gates[i] - ARG0];
+                    let t = wires.macs[gates[i] - ARG0];
+                    assert_eq!(x * (1 - x), 0);
+                    res_x = res_x.wrapping_add(2u64.pow(k).wrapping_mul(x));
+                    res_t = res_t.wrapping_add(2u64.pow(k).wrapping_mul(t));
+                    i += 1;
+                }
             }
             OP_ENCODE8 => {
                 // args: idx1, idx2, ..., idx8
                 // outw: sum 2^{i-1}*xi
                 //
-                // assumse xs are all bits so no overflow happens.
-                todo!()
-                // for k in 0..8 {
-                //     let xk = clr_w[gates[i] - ARG0];
-                //     res += 2u64.pow(k) * xk;
-                //     i += 1;
-                // }
+                // assumes xs are all bits so no overflow happens.
+                res_x = 0;
+                res_t = 0;
+                for k in 0..8 {
+                    let x = wires.cler[gates[i] - ARG0];
+                    let t = wires.macs[gates[i] - ARG0];
+                    assert_eq!(x * (1 - x), 0);
+                    res_x = res_x.wrapping_add(2u64.pow(k).wrapping_mul(x));
+                    res_t = res_t.wrapping_add(2u64.pow(k).wrapping_mul(t));
+                    i += 1;
+                }
             }
             OP_ENCODE32 => {
                 // args: idx1, idx2, ..., idx32
                 // outw: sum 2^{i-1}*xi
                 //
-                // assumse xs are all bits so no overflow happens.
-                todo!()
-                // for k in 0..32 {
-                //     let xk = clr_w[gates[i] - ARG0];
-                //     res += 2u64.pow(k) * xk;
-                //     i += 1;
-                // }
+                // assumes xs are all bits so no overflow happens.
+                res_x = 0;
+                res_t = 0;
+                for k in 0..32 {
+                    let x = wires.cler[gates[i] - ARG0];
+                    let t = wires.macs[gates[i] - ARG0];
+                    assert_eq!(x * (1 - x), 0);
+                    res_x = res_x.wrapping_add(2u64.pow(k).wrapping_mul(x));
+                    res_t = res_t.wrapping_add(2u64.pow(k).wrapping_mul(t));
+                    i += 1;
+                }
             }
 
             // --- mixed ops
@@ -456,25 +525,51 @@ fn eval(
             OP_CHECK_ALL_EQ_BUT_ONE => {
                 // args: idi, idx1, idy1, idx2, idy2,..., idxn, idyn
                 // asserts: xj = yj for j != i
-                todo!()
-                // let mut res_ = true;
-                // let mut i_ = clr_w[gates[i] - ARG0];
-                // // dbg!(i_);
-                // i += 1;
-                // while gates[i] > ARG0 {
-                //     if i_ == 0 {
-                //         i += 2;
-                //         i_ = MAX;
-                //         continue;
-                //     }
-                //     let x = clr_w[gates[i] - ARG0];
-                //     let y = clr_w[gates[i + 1] - ARG0];
-                //     // dbg!(x, y, i, gates[i], gates[i + 1]);
-                //     res_ &= x == y;
-                //     i += 2;
-                //     i_ -= 1;
-                // }
-                // assert!(res_)
+                let i_ = wires.cler[gates[i] - ARG0];
+                let it = wires.macs[gates[i] - ARG0];
+                let mut iu: usize = i_.try_into().ok().unwrap();
+                i += 1;
+                let mut j = 0;
+                let mut sum: u64 = 0;
+                while gates[i] >= ARG0 {
+                    let bj: u64 = if iu == 0 { 0 } else { 1 };
+                    let xj = wires.cler[gates[i] - ARG0];
+                    let yj = wires.cler[gates[i + 1] - ARG0];
+                    let xjt = wires.macs[gates[i] - ARG0];
+                    let yjt = wires.macs[gates[i + 1] - ARG0];
+
+                    // Commit to bj
+                    let bjt = mc_mul[t];
+                    // Send delta
+                    let r = xs_mul[t];
+                    let d = bj.wrapping_sub(xs_mul[t]);
+                    chan.send_delta(d);
+                    sum = sum.wrapping_add(bjt);
+
+                    // Prove (bj-1)*(i-j) opens to 0
+                    let a0 = bjt.wrapping_mul(it);
+                    let a1 = bjt
+                        .wrapping_mul(i_.wrapping_sub(j))
+                        .wrapping_add(it.wrapping_mul(bj.wrapping_sub(1)));
+                    a0a1.push((a0, a1));
+
+                    // Prove bj*(xj-yj) opens to 0
+                    let a0 = bjt.wrapping_mul(xjt.wrapping_sub(yjt));
+                    let a1 = bjt
+                        .wrapping_mul(xj.wrapping_sub(yj))
+                        .wrapping_add((xjt.wrapping_sub(yjt)).wrapping_mul(bj));
+                    a0a1.push((a0, a1));
+
+                    iu = iu.wrapping_sub(1);
+                    i += 2;
+                    t += 1;
+                    j += 1;
+                    if i >= gates.len() {
+                        break;
+                    }
+                }
+                // Prove that sum{j=1,..,n} bj = n-1
+                chan.send_mac(sum)
             }
             OP_DEBUG => {
                 dbg!("here");

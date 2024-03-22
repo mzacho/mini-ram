@@ -11,12 +11,25 @@ pub fn verify64(c: Circuit<u64>, mut chan: VerifierTcpChannel, mut ctx: ProofCtx
     let n_mul = c.n_mul;
     let n_select = c.n_select;
     let n_select_const = c.n_select_const;
-    let mul_or_select = (n_mul > 0) || (n_select > 0) || (n_select_const > 0);
+    let n_decode32 = c.n_decode32;
+    let n_decode64 = c.n_decode64;
+    let n_check_all_eq_but_one = c.n_check_all_eq_but_one;
+    let check_mul = (n_mul > 0)
+        || (n_select > 0)
+        || (n_select_const > 0)
+        || (n_decode32 > 0)
+        || (n_decode64 > 0)
+        || (n_check_all_eq_but_one > 0);
 
     let segments = &vole::Segments {
         n_in,
-        n_mul: n_mul + n_select * 2 + n_select_const,
-        n_mul_check: if mul_or_select { 1 } else { 0 },
+        n_mul: n_mul
+            + n_select * 2
+            + n_select_const
+            + n_decode32 * 32
+            + n_decode64 * 64
+            + n_check_all_eq_but_one,
+        n_mul_check: if check_mul { 1 } else { 0 },
     };
 
     let (delta, mut vole) = preprocess_vole(&mut chan, segments);
@@ -35,10 +48,11 @@ pub fn verify64(c: Circuit<u64>, mut chan: VerifierTcpChannel, mut ctx: ProofCtx
     }
 
     // Choose random challenge _after_ prover has commited to
-    // output of mult. gates. This won't be send it if the
-    // circuit doesen't have any multiplication or select gates
+    // output of mult. gates. This is unused in eval if circuit
+    // doesen't have any multiplication or select gates and therefore
+    // won't be send it this case.
     let x = ctx.next_u64();
-    if (n_mul != 0) || n_select != 0 {
+    if check_mul {
         println!("Sending challenge={x}");
         chan.send_challenge(x);
     }
@@ -51,7 +65,7 @@ pub fn verify64(c: Circuit<u64>, mut chan: VerifierTcpChannel, mut ctx: ProofCtx
     let (w, keys) = eval(&c, wires, delta, x, vole.ks_mul, &mut chan);
     let n = keys.len();
 
-    if (n_mul > 0) | (n_select > 0) {
+    if check_mul {
         // Assert that mul gates are consistent with input
         let u = chan.recv_u();
         let v = chan.recv_v();
@@ -257,67 +271,95 @@ fn eval(
             OP_DECODE32 => {
                 // args: x where x < 2^32
                 // outw: idx1, idx2, ..., idxn s.t sum 2^{i-1}*xi
-                todo!()
-                // let mut x = clr_w[gates[i] - ARG0];
-                // u32::try_from(x).unwrap();
-                // //dbg!(x);
-                // for _ in 1..32 {
-                //     res = u64::from(x.trailing_ones() > 0);
-                //     clr_w.push(res);
-                //     x >>= 1;
-                // }
-                // res = u64::from(x.trailing_ones() > 0);
-                // i += 1;
+                let kx = wires.zm[gates[i] - ARG0];
+                let mut sum: u64 = 0;
+                for i in 0..32 {
+                    let kxi = mul_keys[t];
+
+                    // Verify xi(1-xi) = 0
+                    let k1 = 0u64.wrapping_sub(delta);
+                    let b = kxi.wrapping_mul(k1.wrapping_sub(kxi));
+                    w = w.wrapping_add(b);
+
+                    sum = sum.wrapping_add(2u64.pow(i).wrapping_mul(kxi));
+
+                    if i != 31 {
+                        wires.zm.push(kxi);
+                        t += 1;
+                    } else {
+                        res = kxi;
+                        t += 1;
+                    }
+                }
+                // Verify sum - x opens to 0
+                let mac = chan.recv_mac();
+                assert_eq!(mac, sum.wrapping_sub(kx));
+                i += 1;
             }
             OP_DECODE64 => {
                 // args: x where x < 2^64
                 // outw: idx1, idx2, ..., idxn s.t sum 2^{i-1}*xi
-                todo!()
-                // let mut x = clr_w[gates[i] - ARG0];
-                // //dbg!(x);
-                // for _ in 1..64 {
-                //     res = u64::from(x.trailing_ones() > 0);
-                //     clr_w.push(res);
-                //     x >>= 1;
-                // }
-                // res = u64::from(x.trailing_ones() > 0);
-                // i += 1;
+                let kx = wires.zm[gates[i] - ARG0];
+                let mut sum: u64 = 0;
+                for i in 0..64 {
+                    let kxi = mul_keys[t];
+
+                    // Verify xi(1-xi) = 0
+                    let k1 = 0u64.wrapping_sub(delta);
+                    let b = kxi.wrapping_mul(k1.wrapping_sub(kxi));
+                    // todo: pow challenge
+                    w = w.wrapping_add(b);
+
+                    sum = sum.wrapping_add(2u64.pow(i).wrapping_mul(kxi));
+
+                    if i != 63 {
+                        wires.zm.push(kxi);
+                        t += 1;
+                    } else {
+                        res = kxi;
+                        t += 1;
+                    }
+                }
+                // Verify sum - x opens to 0
+                let mac = chan.recv_mac();
+                assert_eq!(mac, sum.wrapping_sub(kx));
+                i += 1;
             }
             OP_ENCODE4 => {
                 // args: idx1, idx2, idx3, idx4
                 // outw: sum 2^{i-1}*xi
                 //
-                // assumse xs are all bits so no overflow happens.
-                todo!()
-                // for k in 0..4 {
-                //     let xk = clr_w[gates[i] - ARG0];
-                //     res += 2u64.pow(k) * xk;
-                //     i += 1;
-                // }
+                // assumes xs are all bits so no overflow happens.
+                res = 0;
+                for k in 0..4 {
+                    let key = wires.zm[gates[i] - ARG0];
+                    res = res.wrapping_add(2u64.pow(k).wrapping_mul(key));
+                    i += 1;
+                }
             }
             OP_ENCODE8 => {
                 // args: idx1, idx2, ..., idx8
                 // outw: sum 2^{i-1}*xi
                 //
                 // assumse xs are all bits so no overflow happens.
-                todo!()
-                // for k in 0..8 {
-                //     let xk = clr_w[gates[i] - ARG0];
-                //     res += 2u64.pow(k) * xk;
-                //     i += 1;
-                // }
+                res = 0;
+                for k in 0..8 {
+                    let key = wires.zm[gates[i] - ARG0];
+                    res = res.wrapping_add(2u64.pow(k).wrapping_mul(key));
+                    i += 1;
+                }
             }
             OP_ENCODE32 => {
                 // args: idx1, idx2, ..., idx32
                 // outw: sum 2^{i-1}*xi
                 //
                 // assumse xs are all bits so no overflow happens.
-                todo!()
-                // for k in 0..32 {
-                //     let xk = clr_w[gates[i] - ARG0];
-                //     res += 2u64.pow(k) * xk;
-                //     i += 1;
-                // }
+                res = 0;
+                for k in 0..32 {
+                    let key = wires.zm[gates[i] - ARG0];
+                    res = res.wrapping_add(2u64.pow(k).wrapping_mul(key));
+                    i += 1;
+                }
             }
 
             // --- mixed ops
@@ -362,25 +404,39 @@ fn eval(
             OP_CHECK_ALL_EQ_BUT_ONE => {
                 // args: idi, idx1, idy1, idx2, idy2,..., idxn, idyn
                 // asserts: xj = yj for j != i
-                todo!()
-                // let mut res_ = true;
-                // let mut i_ = clr_w[gates[i] - ARG0];
-                // // dbg!(i_);
-                // i += 1;
-                // while gates[i] > ARG0 {
-                //     if i_ == 0 {
-                //         i += 2;
-                //         i_ = MAX;
-                //         continue;
-                //     }
-                //     let x = clr_w[gates[i] - ARG0];
-                //     let y = clr_w[gates[i + 1] - ARG0];
-                //     // dbg!(x, y, i, gates[i], gates[i + 1]);
-                //     res_ &= x == y;
-                //     i += 2;
-                //     i_ -= 1;
-                // }
-                // assert!(res_)
+                let ki = wires.zm[gates[i] - ARG0];
+                let mut sum: u64 = 0;
+                let mut j: u64 = 0;
+                i += 1;
+                while gates[i] >= ARG0 {
+                    let kxj = wires.zm[gates[i] - ARG0];
+                    let kyj = wires.zm[gates[i + 1] - ARG0];
+                    let kj = 0u64.wrapping_sub(delta.wrapping_mul(j));
+                    let k1 = 0u64.wrapping_sub(delta);
+                    let kbj = mul_keys[t];
+
+                    // Verify that (bj-1)*(i-j) opens to 0
+                    let b = (kbj.wrapping_sub(k1)).wrapping_mul(ki.wrapping_sub(kj));
+                    // let tmp = tmp * x.pow(t)
+                    w = w.wrapping_add(b);
+
+                    // Verify that bj*(xj-yj) opens to 0
+                    let b = kbj.wrapping_mul(kxj.wrapping_sub(kyj));
+                    // let tmp = tmp * x.pow(t)
+                    w = w.wrapping_add(b);
+
+                    sum += kbj;
+
+                    i += 2;
+                    j += 1;
+                    t += 1;
+                    if i >= gates.len() {
+                        break;
+                    }
+                }
+                // Verify sum - n-1 opens to 0
+                let mac = chan.recv_mac();
+                assert_eq!(mac, sum.wrapping_add(delta.wrapping_mul(j - 1)));
             }
             OP_DEBUG => {
                 dbg!("here");

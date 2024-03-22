@@ -33,6 +33,9 @@ pub struct Builder<T> {
     n_out: usize,
     n_select: usize,
     n_select_const: usize,
+    n_decode32: usize,
+    n_decode64: usize,
+    n_check_all_eq_but_one: usize,
     offset_arg0: bool,
 }
 
@@ -52,6 +55,12 @@ pub struct Res<T> {
     pub n_select: usize,
     /// Number of select_const alternatives
     pub n_select_const: usize,
+    /// Number of decode32 gates
+    pub n_decode32: usize,
+    /// Number of decode64 gates
+    pub n_decode64: usize,
+    /// Number of check_all_eq_but_one pairs
+    pub n_check_all_eq_but_one: usize,
 }
 
 impl<T> Builder<T> {
@@ -67,6 +76,9 @@ impl<T> Builder<T> {
             n_out: 0,
             n_select: 0,
             n_select_const: 0,
+            n_decode32: 0,
+            n_decode64: 0,
+            n_check_all_eq_but_one: 0,
             offset_arg0: false,
         }
     }
@@ -234,6 +246,7 @@ impl<T> Builder<T> {
         self.gates.push(OP_DECODE32);
         self.gates.push(x);
         self.n_gates += 1;
+        self.n_decode32 += 1;
         self.cursor_wires += 32;
         self.cursor_wires - 32
     }
@@ -244,15 +257,16 @@ impl<T> Builder<T> {
         self.gates.push(OP_DECODE64);
         self.gates.push(x);
         self.n_gates += 1;
+        self.n_decode64 += 1;
         self.cursor_wires += 64;
         self.cursor_wires - 64
     }
 
-    pub fn encode8(&mut self, x1: usize) -> usize {
+    pub fn encode8(&mut self, x0: usize) -> usize {
         #[cfg(test)]
         self.validate();
         self.gates.push(OP_ENCODE8);
-        for id in x1..x1 + 8 {
+        for id in x0..x0 + 8 {
             self.gates.push(id);
         }
         self.n_gates += 1;
@@ -260,11 +274,11 @@ impl<T> Builder<T> {
         self.cursor_wires - 1
     }
 
-    pub fn encode4(&mut self, x1: usize) -> usize {
+    pub fn encode4(&mut self, x0: usize) -> usize {
         #[cfg(test)]
         self.validate();
         self.gates.push(OP_ENCODE4);
-        for id in x1..x1 + 4 {
+        for id in x0..x0 + 4 {
             self.gates.push(id);
         }
         self.n_gates += 1;
@@ -272,11 +286,11 @@ impl<T> Builder<T> {
         self.cursor_wires - 1
     }
 
-    pub fn encode32(&mut self, x1: usize) -> usize {
+    pub fn encode32(&mut self, x0: usize) -> usize {
         #[cfg(test)]
         self.validate();
         self.gates.push(OP_ENCODE32);
-        for id in x1..x1 + 32 {
+        for id in x0..x0 + 32 {
             self.gates.push(id);
         }
         self.n_gates += 1;
@@ -332,6 +346,7 @@ impl<T> Builder<T> {
         self.gates.push(OP_CHECK_Z);
         self.gates.push(x);
         self.n_gates += 1;
+        panic!("deprecated");
     }
 
     pub fn check_eq(&mut self, x: usize, y: usize) {
@@ -341,6 +356,7 @@ impl<T> Builder<T> {
         self.gates.push(x);
         self.gates.push(y);
         self.n_gates += 1;
+        panic!("deprecated");
     }
 
     pub fn check_and(&mut self, x: usize, y: usize, z: usize) {
@@ -351,6 +367,7 @@ impl<T> Builder<T> {
         self.gates.push(y);
         self.gates.push(z);
         self.n_gates += 1;
+        panic!("deprecated");
     }
 
     pub fn check_all_eq_but_one(&mut self, i: usize, ids: &[(usize, usize)]) {
@@ -363,6 +380,7 @@ impl<T> Builder<T> {
             self.gates.push(*y);
         }
         self.n_gates += 1;
+        self.n_check_all_eq_but_one += ids.len()
     }
 
     /// Put builder into state where all ids are offset by ARG0, but
@@ -398,6 +416,9 @@ impl<T> Builder<T> {
             n_mul: self.n_mul,
             n_select: self.n_select,
             n_select_const: self.n_select_const,
+            n_decode32: self.n_decode32,
+            n_decode64: self.n_decode64,
+            n_check_all_eq_but_one: self.n_check_all_eq_but_one,
         }
     }
 }

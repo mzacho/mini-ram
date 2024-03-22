@@ -89,7 +89,7 @@ pub fn mul_mul_eq() -> Circuit<u64> {
 /// A circuit that computes select(x, [y, z])
 pub fn select_eq() -> Circuit<u64> {
     let n_in = 3;
-    let x = ARG0 + 0;
+    let x = ARG0;
     let y = ARG0 + 1;
     let z = ARG0 + 2;
     let mut b = Builder::new(n_in);
@@ -97,11 +97,10 @@ pub fn select_eq() -> Circuit<u64> {
     b.build(&[select])
 }
 
-
 /// A circuit that computes select_const(i, cs)
 pub fn select_const(c1: u64, c2: u64) -> Circuit<u64> {
     let n_in = 1;
-    let x = ARG0 + 0;
+    let x = ARG0;
     let mut b = Builder::new(n_in);
     let c1 = b.push_const(c1);
     let c2 = b.push_const(c2);
@@ -112,15 +111,82 @@ pub fn select_const(c1: u64, c2: u64) -> Circuit<u64> {
 /// A circuit that computes select_const(i, cs)
 pub fn select_const_vec(cs: &[u64]) -> Circuit<u64> {
     let n_in = 1;
-    let x = ARG0 + 0;
+    let x = ARG0;
     let mut b = Builder::new(n_in);
     let mut ids = vec![];
     for c in cs {
         ids.push(b.push_const(*c));
     }
-    let select = b.select_const_range(x, ids[0], ids[ids.len()-1]+1, 1);
+    let select = b.select_const_range(x, ids[0], ids[ids.len() - 1] + 1, 1);
     b.build(&[select])
 }
+
+/// A circuit that computes encode_4(a, b, c, d) - c
+pub fn encode4(c: u64) -> Circuit<u64> {
+    let n_in = 4;
+    let x0 = ARG0;
+    let mut b = Builder::new(n_in);
+    let y = b.encode4(x0);
+    let c = b.push_const(c);
+    let c = b.const_(c);
+    let z = b.sub(y, c);
+    b.build(&[z])
+}
+
+/// A circuit that computes decode32(x),
+/// which outputs 00...0 only if x is 0.
+pub fn decode32() -> Circuit<u64> {
+    let n_in = 1;
+    let x = ARG0;
+    let mut b = Builder::new(n_in);
+    let x0 = b.decode32(x);
+    b.build(&(x0..x0 + 32).collect::<Vec<_>>())
+}
+
+/// A circuit that computes decode64(x),
+/// which outputs 00...0 only if x is 0.
+pub fn decode64() -> Circuit<u64> {
+    let n_in = 1;
+    let x = ARG0;
+    let mut b = Builder::new(n_in);
+    let x0 = b.decode64(x);
+    b.build(&(x0..x0 + 64).collect::<Vec<_>>())
+}
+
+/// A circuit that, on inputs i, x0, y0, x1, y1, asserts
+/// that x(1-i) = y(1-i)
+
+pub fn check_all_eq_but_one() -> Circuit<u64> {
+    let n_in = 5;
+    let x = ARG0;
+    let mut b = Builder::new(n_in);
+    let xs = &[(ARG0 + 1, ARG0 + 2), (ARG0 + 3, ARG0 + 4)];
+    let x0 = b.check_all_eq_but_one(x, xs);
+    b.build(&[])
+}
+
+// /// A circuit that computes decode32(x)[i] - xi
+// /// where
+// pub fn decode32(mut x: u64) -> Circuit<u64> {
+//     let n_in = 32;
+//     let xid = ARG0;
+//     let mut b = Builder::new(n_in);
+//     // push x in binary as consts
+//     let mut ids = vec![];
+//     for _ in 0..32 {
+//         xi = u64::from(x.trailing_ones() > 0);
+//         let id = b.push_const(xi);
+//         let id = b.const_(id);
+//         ids.push(id);
+//         x >>= 1;
+//     }
+//     let x0 = b.decode32(xid);
+//     if
+//     let c = b.push_const(c);
+//     let c = b.const_(c);
+//     let z = b.sub(y, c);
+//     b.build(&[z])
+// }
 
 #[cfg(test)]
 mod test {

@@ -115,9 +115,28 @@ fn main() {
                                 (c, w)
                             }
                             "select_const_vec" => {
-                                let c =
-                circuits::select_const_vec(&[0, 1, 2, 3, 0, 5]);
+                                let c = circuits::select_const_vec(&[0, 1, 2, 3, 0, 5]);
                                 let w = vec![4];
+                                (c, w)
+                            }
+                            "encode4" => {
+                                let c = circuits::encode4(1 + 2 + 8);
+                                let w = vec![1, 1, 0, 1];
+                                (c, w)
+                            }
+                            "decode32" => {
+                                let c = circuits::decode32();
+                                let w = vec![0];
+                                (c, w)
+                            }
+                            "decode64" => {
+                                let c = circuits::decode64();
+                                let w = vec![0];
+                                (c, w)
+                            }
+                            "check_all_eq_but_one" => {
+                                let c = circuits::check_all_eq_but_one();
+                                let w = vec![1, 43, 43, 2, 3];
                                 (c, w)
                             }
                             _ => {
