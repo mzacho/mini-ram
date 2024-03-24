@@ -1,6 +1,8 @@
 #![allow(unused_variables)]
 extern crate utils;
 
+use zerocopy::IntoBytes;
+
 use std::time::Instant;
 
 use rand::rngs::StdRng;
@@ -43,6 +45,10 @@ impl ProofCtx {
 
     pub fn next_u64(&mut self) -> u64 {
         self.rng.next_u64()
+    }
+
+    pub fn fill_bytes(&mut self, buf: &mut [u64]) {
+        self.rng.fill_bytes(buf.as_mut_bytes())
     }
 
     /// Starts a new timer.

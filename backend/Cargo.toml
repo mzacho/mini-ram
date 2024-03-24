@@ -6,3 +6,4 @@ edition = "2021"
 [dependencies]
 utils = { path = "../utils" }
 rand = "0.8.5"
+zerocopy = "0.8.0-alpha.7"

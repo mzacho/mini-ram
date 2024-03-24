@@ -1,3 +1,5 @@
+use zerocopy::transmute;
+
 use std::{
     io::{Read, Write},
     net::TcpStream,
@@ -39,21 +41,25 @@ impl ProverTcpChannel {
     pub fn send_extend_vole_zm(&mut self, n: u64) {
         self.send_extend_vole_z2(n)
     }
-    pub fn recv_extend_vole_z2(&mut self, n: u64) -> (Vec<u64>, Vec<u64>) {
+    pub fn recv_extend_vole_z2(&mut self, _n: usize) -> (Vec<u64>, Vec<u64>) {
+        todo!()
+    }
+    pub fn recv_extend_vole_zm(&mut self, n: usize) -> (Vec<u64>, Vec<u64>) {
         let mut xs = vec![];
         let mut macs = vec![];
-        for _ in 0..n {
+
+        // Read in chunks of 64 u64's at a time
+        for _ in 0..(n >> 6) + 1 {
             // read point of evaluation
-            let x = recv_u64(&mut self.stream_vole);
-            xs.push(x);
+            let xs_ = &recv_64_u64(&mut self.stream_vole);
+            xs.extend_from_slice(xs_);
             // read mac on point
-            let t = recv_u64(&mut self.stream_vole);
-            macs.push(t);
+            let macs_ = &recv_64_u64(&mut self.stream_vole);
+            macs.extend(macs_);
         }
+        xs.truncate(n);
+        macs.truncate(n);
         (xs, macs)
-    }
-    pub fn recv_extend_vole_zm(&mut self, n: u64) -> (Vec<u64>, Vec<u64>) {
-        self.recv_extend_vole_z2(n)
     }
 
     // --- comm. with verifier
@@ -120,17 +126,20 @@ impl VerifierTcpChannel {
         recv_u64(&mut self.stream_vole)
     }
 
-    pub fn recv_extend_vole_z2(&mut self, n: u64) -> Vec<u64> {
-        let mut keys = vec![];
-        for _ in 0..n {
-            // read key
-            keys.push(recv_u64(&mut self.stream_vole));
-        }
-        keys
+    pub fn recv_extend_vole_z2(&mut self, _n: usize) -> Vec<u64> {
+        todo!()
     }
 
-    pub fn recv_extend_vole_zm(&mut self, n: u64) -> Vec<u64> {
-        self.recv_extend_vole_z2(n)
+    pub fn recv_extend_vole_zm(&mut self, n: usize) -> Vec<u64> {
+        let mut keys = vec![];
+
+        // Read in chunks of 64 u64's at a time
+        for _ in 0..(n >> 6) + 1 {
+            let keys_ = &recv_64_u64(&mut self.stream_vole);
+            keys.extend(keys_);
+        }
+        keys.truncate(n);
+        keys
     }
 
     // --- comm. with prover
@@ -190,4 +199,10 @@ pub fn recv_u64(stream: &mut TcpStream) -> u64 {
         }
     }
     u64::from_le_bytes(buf)
+}
+
+pub fn recv_64_u64(stream: &mut TcpStream) -> [u64; 64] {
+    let mut buf: [u8; 8 * 64] = [0; 8 * 64];
+    stream.read_exact(&mut buf).unwrap();
+    transmute!(buf)
 }

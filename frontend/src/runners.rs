@@ -1,9 +1,12 @@
+use zerocopy::IntoBytes;
+
 use crate::ProofCtx;
 use backend::quicksilver::prove::prove64;
 use backend::quicksilver::verify::verify64;
 use std::io::Write;
 use std::net::TcpListener;
 use std::net::TcpStream;
+use std::simd::Simd;
 use utils::channel;
 use utils::channel::*;
 use utils::circuit::builder::Res as Circuit;
@@ -60,38 +63,43 @@ pub fn run_vole(port: u16, mut ctx: ProofCtx) -> std::io::Result<()> {
     let delta = ctx.next_u64();
     println!("Sending delta={delta} to verifier");
     snd_delta(&mut stream_v, delta)?;
+    let delta = Simd::from([delta; 64]);
 
     println!("Sending correlations to both parties...");
-    let one_tenth_done = n / 10;
+    // fill random bytes in 1KB blocks
+    let mut buf_val: [u64; 64] = [0; 64];
+    let mut buf_key: [u64; 64] = [0; 64];
+    let one_tenth_done = (n / 64) / 10;
     let mut ctr = 0;
     ctx.start_time("vole");
-    for i in 0..n {
-        if i % one_tenth_done == 0 {
+    for i in 0..(n / 64) + 3 {
+        if (one_tenth_done != 0) && i % one_tenth_done == 0 {
             println!("  [progress] {ctr}%");
             ctr += 10;
         }
-        let r = ctx.next_u64();
-        let k = ctx.next_u64();
-        let m = delta.wrapping_mul(r).wrapping_add(k);
+        ctx.fill_bytes(&mut buf_val);
+        ctx.fill_bytes(&mut buf_key);
+        let r = Simd::from(buf_val);
+        let k = Simd::from(buf_key);
+        let m = (delta * r) + k;
         // println!("  i={i}: Sending r={r}, m={m} to prover");
-        snd_extend_mac(&mut stream_p, r, m)?;
+        snd_extend_mac(&mut stream_p, &r.into(), &m.into())?;
         // println!("       Sending k={k} to verifier");
-        snd_extend_key(&mut stream_v, k)?;
+        snd_extend_key(&mut stream_v, &k.into())?;
     }
     ctx.stop_time();
     println!("Done, exiting.");
     Ok(())
 }
 
-fn snd_extend_mac(stream: &mut TcpStream, r: u64, m: u64) -> std::io::Result<()> {
-    let n = stream.write(&r.to_le_bytes())? + stream.write(&m.to_le_bytes())?;
-    assert_eq!(n, 16);
+fn snd_extend_mac(stream: &mut TcpStream, r: &[u64; 64], m: &[u64; 64]) -> std::io::Result<()> {
+    stream.write_all(r.as_bytes())?;
+    stream.write_all(m.as_bytes())?;
     Ok(())
 }
 
-fn snd_extend_key(stream: &mut TcpStream, k: u64) -> std::io::Result<()> {
-    let n = stream.write(&k.to_le_bytes())?;
-    assert_eq!(n, 8);
+fn snd_extend_key(stream: &mut TcpStream, k: &[u64; 64]) -> std::io::Result<()> {
+    stream.write_all(k.as_bytes())?;
     Ok(())
 }
 

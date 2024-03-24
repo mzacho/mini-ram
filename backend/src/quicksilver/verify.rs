@@ -460,11 +460,11 @@ fn preprocess_vole(
     let delta = chan.recv_delta_from_dealer();
     println!("Received delta={delta}");
 
-    let ks_in = chan.recv_extend_vole_zm(segs.n_in.try_into().unwrap());
+    let ks_in = chan.recv_extend_vole_zm(segs.n_in);
     // println!("  Received ks_in={ks_in:?}");
-    let ks_mul = chan.recv_extend_vole_zm(segs.n_mul.try_into().unwrap());
+    let ks_mul = chan.recv_extend_vole_zm(segs.n_mul);
     // println!("  Received ks_mul={ks_mul:?}");
-    let ks_mul_check = chan.recv_extend_vole_zm(segs.n_mul_check.try_into().unwrap());
+    let ks_mul_check = chan.recv_extend_vole_zm(segs.n_mul_check);
     // println!("  Received ks_mul_check={ks_mul_check:?}");
 
     (

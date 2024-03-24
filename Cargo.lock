@@ -45,6 +45,7 @@ version = "0.1.0"
 dependencies = [
  "rand",
  "utils",
+ "zerocopy",
 ]
 
 [[package]]
@@ -218,6 +219,7 @@ dependencies = [
  "strum",
  "strum_macros",
  "utils",
+ "zerocopy",
 ]
 
 [[package]]
@@ -832,6 +834,7 @@ dependencies = [
  "graph_builder",
  "graphviz-rust",
  "permutation",
+ "zerocopy",
 ]
 
 [[package]]
@@ -990,3 +993,23 @@ name = "windows_x86_64_msvc"
 version = "0.52.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32b752e52a2da0ddfbdbcc6fceadfeede4c939ed16d13e648833a61dfb611ed8"
+
+[[package]]
+name = "zerocopy"
+version = "0.8.0-alpha.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a24d6914f948ad0c1eaf3f2cb03a66e674714280d020ea8d955f765f8abb2e7a"
+dependencies = [
+ "zerocopy-derive",
+]
+
+[[package]]
+name = "zerocopy-derive"
+version = "0.8.0-alpha.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e862f7936bea2c96af2769d9d60ff534da9af29dd59943519403256f30bf5ac3"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.52",
+]

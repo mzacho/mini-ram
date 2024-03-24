@@ -1,3 +1,5 @@
+#![feature(portable_simd)]
+
 extern crate args;
 extern crate getopts;
 extern crate utils;
@@ -17,8 +19,8 @@ use std::env;
 use std::process::exit;
 
 use backend::ProofCtx;
-use utils::circuit::circuits;
 use utils::circuit::builder::Res as Circuit;
+use utils::circuit::circuits;
 
 use crate::miniram::programs;
 use crate::miniram::reduction::encode_witness;
@@ -173,9 +175,8 @@ fn main() {
                     match party.as_ref() {
                         "prover" => {
                             print_circuit_stats(&c);
-                            run_p(port, port_vole.unwrap(), c, w,
-                                  ctx)
-                        },
+                            run_p(port, port_vole.unwrap(), c, w, ctx)
+                        }
                         "verifier" => run_v(port, port_vole.unwrap(), c, ctx),
                         _ => panic!("unreachable"),
                     }
