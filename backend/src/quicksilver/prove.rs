@@ -36,7 +36,6 @@ pub fn prove64(c: Circuit<u64>, w: Vec<u64>, mut chan: ProverTcpChannel, _ctx: P
     println!("Sending deltas of witness.");
     for (i, (wi, xi)) in w.iter().zip(&voles.xs_in).enumerate() {
         let delta = wi.wrapping_sub(*xi);
-        println!(" w{i}={wi}, delta={delta}");
         chan.send_delta(delta);
     }
 
@@ -46,11 +45,14 @@ pub fn prove64(c: Circuit<u64>, w: Vec<u64>, mut chan: ProverTcpChannel, _ctx: P
         cler: w,
         macs: voles.mc_in,
     };
-    let (outputs, mult_checks) = eval(&c, wires, voles.xs_mul, voles.mc_mul, &mut chan);
+    let (outputs, mult_checks, openings) = eval(&c, wires, voles.xs_mul, voles.mc_mul, &mut chan);
+
+    for mac in openings {
+        chan.send_mac(mac)
+    }
 
     if check_mul {
         let x = chan.recv_challenge();
-        println!("Received challenge {x}");
 
         // Compute A0 and A1
         let (a0, a1) = compute_a0a1(x, mult_checks);
@@ -69,7 +71,6 @@ pub fn prove64(c: Circuit<u64>, w: Vec<u64>, mut chan: ProverTcpChannel, _ctx: P
         // Assert that prover is honest
         assert_eq!(val, 0);
         chan.send_mac(mac);
-        println!("  Send mac={mac}");
     }
 
     println!("Done, exiting.");
@@ -121,6 +122,7 @@ struct Wires {
 
 type ValWithMac = (u64, u64);
 type A0A1 = (u64, u64);
+type Mac = u64;
 
 /// Evaluation circuit on clear-text witness as well as macs
 ///
@@ -132,7 +134,7 @@ fn eval(
     xs_mul: Vec<u64>,
     mc_mul: Vec<u64>,
     chan: &mut ProverTcpChannel,
-) -> (Vec<ValWithMac>, Vec<A0A1>) {
+) -> (Vec<ValWithMac>, Vec<A0A1>, Vec<Mac>) {
     let gates = &c.gates;
     let consts = &c.consts;
     let n_gates = c.n_gates;
@@ -145,6 +147,8 @@ fn eval(
 
     let mut out = vec![];
     let mut a0a1 = vec![];
+    let mut openings = vec![];
+
     let mut i = 0; // ctr gate
     let mut t = 0; // ctr mul
     for _ in 0..n_gates {
@@ -152,7 +156,6 @@ fn eval(
         i += 1;
         let mut res_x: u64 = 0;
         let mut res_t: u64 = 0;
-        //dbg!(&op);
         match op {
             // --- binary ops
             OP_XOR => {
@@ -254,7 +257,6 @@ fn eval(
                 let i_ = wires.cler[gates[i] - ARG0];
                 let it = wires.macs[gates[i] - ARG0];
                 let mut iu: usize = i_.try_into().ok().unwrap();
-                //dbg!(i_);
                 i += 1;
                 res_x = wires.cler[gates[i + iu] - ARG0];
                 res_t = 0;
@@ -305,8 +307,7 @@ fn eval(
                     }
                 }
                 // Prove that sum of bs opens to 1
-                println!("  [select] opening sum bs, bst={bst}");
-                chan.send_mac(bst);
+                openings.push(bst);
             }
             OP_SELECT_CONST => {
                 // args: idi, idc1, idc2, ..., idcn where i <= n
@@ -329,7 +330,6 @@ fn eval(
                     // Send delta
                     let r = xs_mul[t];
                     let d = bj.wrapping_sub(xs_mul[t]);
-                    println!("  [select] Sending b{j} delta={d}, r={r}.");
                     chan.send_delta(d);
                     // Add tag to sum of bj tags
                     bst = bst.wrapping_add(bjt);
@@ -354,8 +354,7 @@ fn eval(
                     }
                 }
                 // Prove that sum of bs opens to 1
-                println!("  [select] opening sum bs, bst={bst}");
-                chan.send_mac(bst);
+                openings.push(bst);
             }
             OP_DECODE32 => {
                 // args: x where x < 2^32
@@ -392,7 +391,7 @@ fn eval(
                     }
                 }
                 // Prove pow sum opens to x
-                chan.send_mac(sum.wrapping_sub(xt));
+                openings.push(sum.wrapping_sub(xt));
                 i += 1;
             }
             OP_DECODE64 => {
@@ -400,7 +399,6 @@ fn eval(
                 // outw: idx1, idx2, ..., idxn s.t sum 2^{i-1}*xi
                 let mut x = wires.cler[gates[i] - ARG0];
                 let xt = wires.macs[gates[i] - ARG0];
-                u32::try_from(x).unwrap();
                 let mut sum: u64 = 0;
                 for i in 0..64 {
                     let xi = u64::from(x.trailing_ones() > 0);
@@ -430,7 +428,7 @@ fn eval(
                     }
                 }
                 // Prove pow sum opens to x
-                chan.send_mac(sum.wrapping_sub(xt));
+                openings.push(sum.wrapping_sub(xt));
                 i += 1;
             }
             OP_ENCODE4 => {
@@ -569,7 +567,7 @@ fn eval(
                     }
                 }
                 // Prove that sum{j=1,..,n} bj = n-1
-                chan.send_mac(sum)
+                openings.push(sum)
             }
             OP_DEBUG => {
                 dbg!("here");
@@ -578,14 +576,13 @@ fn eval(
             _ => panic!("invalid operation"),
         }
         if (op != OP_OUT) & !is_check(op) & !matches!(op, OP_DEBUG) {
-            // dbg!(res);
             wires.cler.push(res_x);
             wires.macs.push(res_t);
         }
         // dbg!(&wires);
     }
     //pp::print(c, Some(&clr_w));
-    (out, a0a1)
+    (out, a0a1, openings)
 }
 
 /// Counts number of gates

@@ -51,7 +51,6 @@ pub fn mul_eq() -> Prog {
 }
 
 /// RET 0
-#[cfg(test)]
 pub fn const_0() -> Prog {
     Builder::new().ret_c(0).build()
 }

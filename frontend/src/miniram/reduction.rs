@@ -102,7 +102,6 @@ pub fn generate_circuit(prog: &Prog, t: usize) -> builder::Res<u64> {
 
     let mut b = builder::Builder::new(n_in);
     let mut outputs = vec![];
-    b.validate();
 
     // hard-code program
     let p = encode(prog);
@@ -428,7 +427,7 @@ fn alu(b: &mut Builder<u64>, in_: AluIn, dst_out: usize, one: usize) -> (usize, 
 
     // used to trigger a run-time panic if this argument is returned
     // as res. todo: select(in_.op / 4, ids) instead
-    let mut ids = [usize::MAX; 37];
+    let mut ids = [ARG0; 37];
     ids[2] = a2;
     ids[3] = a3;
     ids[4] = a4;

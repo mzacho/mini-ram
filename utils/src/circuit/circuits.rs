@@ -97,6 +97,19 @@ pub fn select_eq() -> Circuit<u64> {
     b.build(&[select])
 }
 
+/// A circuit that computes select(i, [a, b, c, d])
+pub fn select_eq2() -> Circuit<u64> {
+    let n_in = 5;
+    let i = ARG0;
+    let a = ARG0 + 1;
+    let b_ = ARG0 + 2;
+    let c = ARG0 + 3;
+    let d = ARG0 + 4;
+    let mut b = Builder::new(n_in);
+    let select = b.select(i, &[a, b_, c, d]);
+    b.build(&[select])
+}
+
 /// A circuit that computes select_const(i, cs)
 pub fn select_const(c1: u64, c2: u64) -> Circuit<u64> {
     let n_in = 1;
@@ -151,6 +164,18 @@ pub fn decode64() -> Circuit<u64> {
     let mut b = Builder::new(n_in);
     let x0 = b.decode64(x);
     b.build(&(x0..x0 + 64).collect::<Vec<_>>())
+}
+
+pub fn decode64_2(i: usize) -> Circuit<u64> {
+    let n_in = 1;
+    let x = ARG0;
+    let mut b = Builder::new(n_in);
+    let one = b.push_const(1);
+    let one = b.const_(one);
+    let x0 = b.decode64(x);
+    let xi = x0 + i;
+    let sub = b.sub(xi, one);
+    b.build(&[sub])
 }
 
 /// A circuit that, on inputs i, x0, y0, x1, y1, asserts

@@ -67,6 +67,14 @@ fn main() {
                                 let c = generate_circuit(&prog, t);
                                 (c, w)
                             }
+                            "const0" => {
+                                let prog = programs::const_0();
+                                let args = vec![];
+                                let w = encode_witness(&prog, args, t).unwrap(); // todo: handle
+                                let c = generate_circuit(&prog, t);
+                                (c, w)
+                            }
+
                             _ => {
                                 println!("don't understand: {}", prog);
                                 exit(1);
@@ -109,6 +117,11 @@ fn main() {
                                 let w = vec![0, 0, 1];
                                 (c, w)
                             }
+                            "select_eq2" => {
+                                let c = circuits::select_eq2();
+                                let w = vec![2, 1337, 1, 0, 42];
+                                (c, w)
+                            }
                             "select_const" => {
                                 let c = circuits::select_const(0, 1);
                                 let w = vec![0];
@@ -134,7 +147,12 @@ fn main() {
                                 let w = vec![0];
                                 (c, w)
                             }
-                            "check_all_eq_but_one" => {
+                            "decode64_2" => {
+                                let c = circuits::decode64_2(8);
+                                let w = vec![256];
+                                (c, w)
+                            }
+                            "w_all_eq_but_one" => {
                                 let c = circuits::check_all_eq_but_one();
                                 let w = vec![1, 43, 43, 2, 3];
                                 (c, w)

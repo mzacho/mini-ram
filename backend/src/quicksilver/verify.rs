@@ -37,13 +37,11 @@ pub fn verify64(c: Circuit<u64>, mut chan: VerifierTcpChannel, mut ctx: ProofCtx
     println!("Receiving deltas of witness.");
     for i in 0..segments.n_in {
         let d = chan.recv_delta_from_prover();
-        println!("  Received d{i}={d}");
         vole.ks_in[i] = vole.ks_in[i].wrapping_sub(delta.wrapping_mul(d));
     }
     println!("Receiving deltas of mult and select gates.");
     for i in 0..segments.n_mul {
         let d = chan.recv_delta_from_prover();
-        println!("Received delta{i}={d}");
         vole.ks_mul[i] = vole.ks_mul[i].wrapping_sub(delta.wrapping_mul(d));
     }
 
@@ -53,7 +51,6 @@ pub fn verify64(c: Circuit<u64>, mut chan: VerifierTcpChannel, mut ctx: ProofCtx
     // won't be send it this case.
     let x = ctx.next_u64();
     if check_mul {
-        println!("Sending challenge={x}");
         chan.send_challenge(x);
     }
 
@@ -102,7 +99,7 @@ fn eval(
     let consts = &c.consts;
     let n_gates = c.n_gates;
 
-    let mut keys = vec![];
+    let mut outputs = vec![];
     let mut w: u64 = 0;
 
     let mut i = 0; // ctr gate
@@ -111,7 +108,6 @@ fn eval(
         let op = gates[i];
         i += 1;
         let mut res: u64 = 0;
-        //dbg!(&op);
         match op {
             // --- binary ops
             OP_XOR => {
@@ -203,9 +199,7 @@ fn eval(
                 while gates[i] >= ARG0 {
                     let kxj = wires.zm[gates[i] - ARG0];
                     let kbj = mul_keys[t];
-                    println!("  [select] Using kb{j}={kbj}");
                     let kxjbj = mul_keys[t + 1];
-                    println!("  [select] Using kx{j}b{j}={kxjbj}");
                     let kj = 0u64.wrapping_sub(delta.wrapping_mul(j));
 
                     // Verify bj*(i-j) = 0
@@ -230,7 +224,6 @@ fn eval(
                 }
                 // Receive mac of sum bj, assert that it opens to 1
                 let mac = chan.recv_mac();
-                println!("  [select] veriying sum bs, mac={mac}");
                 assert_eq!(mac, kbs.wrapping_add(delta));
             }
             OP_SELECT_CONST => {
@@ -245,7 +238,6 @@ fn eval(
                     let cj = consts[gates[i] - ARG0];
                     let kcj = 0u64.wrapping_sub(delta.wrapping_mul(cj));
                     let kbj = mul_keys[t];
-                    println!("  [select] Using kb{j}={kbj}");
                     let kcjbj = cj.wrapping_mul(kbj);
                     let kj = 0u64.wrapping_sub(delta.wrapping_mul(j));
 
@@ -392,7 +384,7 @@ fn eval(
                 // outw: none
                 // out: x
                 let key = wires.zm[gates[i] - ARG0];
-                keys.push(key);
+                outputs.push(key);
                 i += 1;
             }
             // --- verificatin ops
@@ -425,7 +417,7 @@ fn eval(
                     // let tmp = tmp * x.pow(t)
                     w = w.wrapping_add(b);
 
-                    sum += kbj;
+                    sum = sum.wrapping_add( kbj);
 
                     i += 2;
                     j += 1;
@@ -445,12 +437,11 @@ fn eval(
             _ => panic!("invalid operation"),
         }
         if (op != OP_OUT) & !is_check(op) & !matches!(op, OP_DEBUG) {
-            // dbg!(res);
             wires.zm.push(res);
         }
         // dbg!(&wires);
     }
-    (w, keys)
+    (w, outputs)
 }
 
 fn preprocess_vole(
