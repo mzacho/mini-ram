@@ -5,7 +5,7 @@ use utils::channel::*;
 
 use crate::ProofCtx;
 
-pub fn prove64(c: Circuit<u64>, w: Vec<u64>, mut chan: ProverTcpChannel, _ctx: ProofCtx) {
+pub fn prove64(c: Circuit<u64>, w: Vec<u64>, mut chan: ProverTcpChannel, mut ctx: ProofCtx) {
     let n_in = w.len();
     let n_mul = c.n_mul;
     let n_select = c.n_select;
@@ -31,31 +31,38 @@ pub fn prove64(c: Circuit<u64>, w: Vec<u64>, mut chan: ProverTcpChannel, _ctx: P
         n_mul_check: if check_mul { 1 } else { 0 },
     };
 
+    ctx.start_time("preprocess vole");
     let voles = preprocess_vole(&mut chan, segments);
+    ctx.stop_time();
 
-    println!("Sending deltas of witness.");
+    ctx.start_time("sending deltas of witness");
     for (i, (wi, xi)) in w.iter().zip(&voles.xs_in).enumerate() {
         let delta = wi.wrapping_sub(*xi);
         chan.send_delta(delta);
     }
-
-    println!("Evaluating circuit.");
+    ctx.stop_time();
 
     let wires = Wires {
         cler: w,
         macs: voles.mc_in,
     };
-    let (outputs, mult_checks, openings) = eval(&c, wires, voles.xs_mul, voles.mc_mul, &mut chan);
+    ctx.start_time("evaluating circuit");
+    let (outputs, mult_checks, openings) = eval(&c, wires,
+                                                voles.xs_mul, voles.mc_mul, &mut chan);
+    ctx.stop_time();
 
+    ctx.start_time("opening outputs");
     for mac in openings {
         chan.send_mac(mac)
     }
+    ctx.stop_time();
 
     if check_mul {
         let x = chan.recv_challenge();
 
-        // Compute A0 and A1
+        ctx.start_time("computing a0a1");
         let (a0, a1) = compute_a0a1(x, mult_checks);
+        ctx.stop_time();
 
         // Compute U and V by masking with rvole correlation
         let u = a0.wrapping_add(voles.mc_mul_check[0]);
@@ -66,12 +73,13 @@ pub fn prove64(c: Circuit<u64>, w: Vec<u64>, mut chan: ProverTcpChannel, _ctx: P
         chan.send_v(v);
     }
 
-    println!("Sending opening of outputs.");
+    ctx.start_time("sending opening of outputs.");
     for (val, mac) in outputs {
         // Assert that prover is honest
         assert_eq!(val, 0);
         chan.send_mac(mac);
     }
+    ctx.stop_time();
 
     println!("Done, exiting.");
 }
@@ -93,17 +101,17 @@ fn preprocess_vole(chan: &mut ProverTcpChannel, segs: &vole::Segments) -> vole::
     println!("Sending extend VOLE n={n}");
     chan.send_extend_vole_zm(n);
     let (xs_in, mc_in) = chan.recv_extend_vole_zm(segs.n_in.try_into().unwrap());
-    println!("  Correlations for witness:");
-    println!("  Received xs={xs_in:?}, macs={mc_in:?}");
+    // println!("  Correlations for witness:");
+    // println!("  Received xs={xs_in:?}, macs={mc_in:?}");
 
     let (xs_mul, mc_mul) = chan.recv_extend_vole_zm(segs.n_mul.try_into().unwrap());
-    println!("  Correlations for multiplications:");
-    println!("  Received xs={xs_mul:?}, macs={mc_mul:?}");
+    // println!("  Correlations for multiplications:");
+    // println!("  Received xs={xs_mul:?}, macs={mc_mul:?}");
 
     let (xs_mul_check, mc_mul_check) =
         chan.recv_extend_vole_zm(segs.n_mul_check.try_into().unwrap());
-    println!("  Correlations for multiplication checks:");
-    println!("  Received xs={xs_mul_check:?}, macs={mc_mul_check:?}");
+    // println!("  Correlations for multiplication checks:");
+    // println!("  Received xs={xs_mul_check:?}, macs={mc_mul_check:?}");
 
     vole::CorrSender {
         xs_in,

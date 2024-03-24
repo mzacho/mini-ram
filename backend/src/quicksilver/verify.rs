@@ -32,18 +32,23 @@ pub fn verify64(c: Circuit<u64>, mut chan: VerifierTcpChannel, mut ctx: ProofCtx
         n_mul_check: if check_mul { 1 } else { 0 },
     };
 
+    ctx.start_time("preprocess vole");
     let (delta, mut vole) = preprocess_vole(&mut chan, segments);
+    ctx.stop_time();
 
-    println!("Receiving deltas of witness.");
+    ctx.start_time("receiving deltas of witness");
     for i in 0..segments.n_in {
         let d = chan.recv_delta_from_prover();
         vole.ks_in[i] = vole.ks_in[i].wrapping_sub(delta.wrapping_mul(d));
     }
-    println!("Receiving deltas of mult and select gates.");
+    ctx.stop_time();
+
+    ctx.start_time("receiving deltas of mult and select gates.");
     for i in 0..segments.n_mul {
         let d = chan.recv_delta_from_prover();
         vole.ks_mul[i] = vole.ks_mul[i].wrapping_sub(delta.wrapping_mul(d));
     }
+    ctx.stop_time();
 
     // Choose random challenge _after_ prover has commited to
     // output of mult. gates. This is unused in eval if circuit
@@ -59,8 +64,10 @@ pub fn verify64(c: Circuit<u64>, mut chan: VerifierTcpChannel, mut ctx: ProofCtx
         z2: vec![],
     };
 
+    ctx.start_time("evaluating circuit");
     let (w, keys) = eval(&c, wires, delta, x, vole.ks_mul, &mut chan);
     let n = keys.len();
+    ctx.stop_time();
 
     if check_mul {
         // Assert that mul gates are consistent with input
@@ -71,14 +78,17 @@ pub fn verify64(c: Circuit<u64>, mut chan: VerifierTcpChannel, mut ctx: ProofCtx
     }
 
     println!("Receiving openings (macs) of {n} output values.");
+    ctx.start_time("openings");
     for key in keys {
         let mac = chan.recv_mac();
         assert_eq!(mac, key);
     }
+    ctx.stop_time();
 
     println!("Verifier accepts, exiting.");
 }
 
+#[allow(dead_code)]
 struct Wires {
     zm: Vec<u64>,
     z2: Vec<u64>,
@@ -257,7 +267,6 @@ fn eval(
                 }
                 // Receive mac of sum bj, assert that it opens to 1
                 let mac = chan.recv_mac();
-                println!("  [select] veriying sum bs, mac={mac}");
                 assert_eq!(mac, kbs.wrapping_add(delta));
             }
             OP_DECODE32 => {
@@ -417,7 +426,7 @@ fn eval(
                     // let tmp = tmp * x.pow(t)
                     w = w.wrapping_add(b);
 
-                    sum = sum.wrapping_add( kbj);
+                    sum = sum.wrapping_add(kbj);
 
                     i += 2;
                     j += 1;
@@ -452,11 +461,11 @@ fn preprocess_vole(
     println!("Received delta={delta}");
 
     let ks_in = chan.recv_extend_vole_zm(segs.n_in.try_into().unwrap());
-    println!("  Received ks_in={ks_in:?}");
+    // println!("  Received ks_in={ks_in:?}");
     let ks_mul = chan.recv_extend_vole_zm(segs.n_mul.try_into().unwrap());
-    println!("  Received ks_mul={ks_mul:?}");
+    // println!("  Received ks_mul={ks_mul:?}");
     let ks_mul_check = chan.recv_extend_vole_zm(segs.n_mul_check.try_into().unwrap());
-    println!("  Received ks_mul_check={ks_mul_check:?}");
+    // println!("  Received ks_mul_check={ks_mul_check:?}");
 
     (
         delta,

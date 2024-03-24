@@ -2,6 +2,7 @@ use crate::miniram::interpreter::*;
 use crate::miniram::lang::reg::*;
 use crate::miniram::lang::*;
 
+use backend::ProofCtx;
 use utils::{permutation, waksman};
 
 use utils::circuit::{
@@ -18,8 +19,10 @@ type Witness = Vec<u64>;
 ///
 /// The witness consists of the local state of program execution,
 /// i.e a Vec<LocalState> that is as long as the time bound t
-pub fn encode_witness(prog: &Prog, args: Vec<Word>, t: usize) -> Res<Witness> {
+pub fn encode_witness(prog: &Prog, args: Vec<Word>, t: usize, ctx: &mut ProofCtx) -> Res<Witness> {
+    ctx.start_time("interpret program");
     let (res, mut lsts) = interpret(prog, args, t)?;
+    ctx.stop_time();
     assert_eq!(res, 0);
     if lsts.len() < t {
         // assume program runs for at least one step
@@ -28,7 +31,7 @@ pub fn encode_witness(prog: &Prog, args: Vec<Word>, t: usize) -> Res<Witness> {
             lsts.push(last_st);
         }
     }
-    Ok(convert_localstates(lsts))
+    Ok(convert_localstates(lsts, ctx))
 }
 
 /// Convert the local states to the witness, which is a vector W of
@@ -60,7 +63,7 @@ pub fn encode_witness(prog: &Prog, args: Vec<Word>, t: usize) -> Res<Witness> {
 ///
 /// Finally, c1, ..., ck is the configuration of the AS-Waksman network
 /// that performs the sorting permutation.
-fn convert_localstates(lsts: Vec<LocalStateAug>) -> Witness {
+fn convert_localstates(lsts: Vec<LocalStateAug>, ctx: &mut ProofCtx) -> Witness {
     let mut res = vec![];
     // Push S1, S2, ..., St
     for s in lsts.iter() {
@@ -73,12 +76,16 @@ fn convert_localstates(lsts: Vec<LocalStateAug>) -> Witness {
     }
     // Compute the permutation that sorts the states according to
     // memory accesses.
+    ctx.start_time("compute sorting permutation");
     let p = permutation::sort(&lsts);
+    ctx.stop_time();
 
     // Push configuration of permutation network
+    ctx.start_time("route sorting permutation of witness");
     for c in waksman::route(&p.inverse()) {
         res.push(u64::from(c));
     }
+    ctx.stop_time();
 
     // dbg!(&lsts);
     // dbg!(&p.apply_slice(&lsts));
@@ -455,6 +462,7 @@ fn alu(b: &mut Builder<u64>, in_: AluIn, dst_out: usize, one: usize) -> (usize, 
 
 #[cfg(test)]
 mod test {
+    use backend::ProofCtx;
     use utils::circuit::eval64;
 
     use crate::miniram::lang::Prog;
@@ -468,7 +476,8 @@ mod test {
         let t = 100;
         let p = &mul_eq();
         let args = vec![2, 2, 4];
-        encode_witness(p, args, t).unwrap();
+        let ctx = &mut ProofCtx::new_deterministic();
+        encode_witness(p, args, t, ctx).unwrap();
     }
 
     #[test]
@@ -703,7 +712,8 @@ mod test {
     fn convert_and_eval(p: &Prog, args: Vec<Word>, t: usize) -> Vec<u64> {
         let c = &generate_circuit(p, t);
         //pp::print(c, None);
-        let w = encode_witness(p, args, t).unwrap();
+        let ctx = &mut ProofCtx::new_deterministic();
+        let w = encode_witness(p, args, t, ctx).unwrap();
         // dbg!(&w);
         eval64(c, w)
     }

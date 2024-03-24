@@ -18,6 +18,7 @@ use std::process::exit;
 
 use backend::ProofCtx;
 use utils::circuit::circuits;
+use utils::circuit::builder::Res as Circuit;
 
 use crate::miniram::programs;
 use crate::miniram::reduction::encode_witness;
@@ -46,8 +47,8 @@ fn main() {
         }) => {
             println!("Successfully parsed args");
 
-            let deterministic = true;
-            let ctx = if deterministic {
+            let deterministic = false;
+            let mut ctx = if deterministic {
                 ProofCtx::new_deterministic()
             } else {
                 ProofCtx::new_random()
@@ -59,27 +60,30 @@ fn main() {
                     let (c, w) = if prog.is_some() & t.is_some() {
                         let prog = prog.unwrap();
                         let t = t.unwrap();
-                        match prog.as_str() {
+                        let (prog, args) = match prog.as_str() {
                             "mul_eq" => {
                                 let prog = programs::mul_eq();
                                 let args = vec![2, 2, 4];
-                                let w = encode_witness(&prog, args, t).unwrap(); // todo: handle
-                                let c = generate_circuit(&prog, t);
-                                (c, w)
+                                (prog, args)
                             }
                             "const0" => {
                                 let prog = programs::const_0();
                                 let args = vec![];
-                                let w = encode_witness(&prog, args, t).unwrap(); // todo: handle
-                                let c = generate_circuit(&prog, t);
-                                (c, w)
+                                (prog, args)
                             }
 
                             _ => {
                                 println!("don't understand: {}", prog);
                                 exit(1);
                             }
-                        }
+                        };
+                        ctx.start_time("encode witness");
+                        let w = encode_witness(&prog, args, t, &mut ctx).unwrap(); // todo: handle
+                        ctx.stop_time();
+                        ctx.start_time("generate circuit");
+                        let c = generate_circuit(&prog, t);
+                        ctx.stop_time();
+                        (c, w)
                     } else if let Some(circuit) = circuit {
                         match circuit.as_str() {
                             "add_eq_42" => {
@@ -167,7 +171,11 @@ fn main() {
                         exit(1);
                     };
                     match party.as_ref() {
-                        "prover" => run_p(port, port_vole.unwrap(), c, w, ctx),
+                        "prover" => {
+                            print_circuit_stats(&c);
+                            run_p(port, port_vole.unwrap(), c, w,
+                                  ctx)
+                        },
                         "verifier" => run_v(port, port_vole.unwrap(), c, ctx),
                         _ => panic!("unreachable"),
                     }
@@ -185,6 +193,29 @@ fn main() {
             exit(1);
         }
     };
+}
+
+fn print_circuit_stats<T>(c: &Circuit<T>) {
+    let n_in = c.n_in;
+    let n_mul = c.n_mul;
+    let n_gates = c.gates.len();
+    let n_select = c.n_select;
+    let n_decode32 = c.n_decode32;
+    let n_decode64 = c.n_decode64;
+    let n_check_all = c.n_check_all_eq_but_one;
+    let n_consts = c.consts.len();
+    let n_out = c.n_out;
+    println!("Circuit ====================================");
+    println!("  number of inputs         : {n_in}");
+    println!("  number of gates          : {n_gates}");
+    println!("    - multiplication       : {n_mul}");
+    println!("    - selects              : {n_select}");
+    println!("    - decode32             : {n_decode32}");
+    println!("    - decode64             : {n_decode64}");
+    println!("    - check all eq but one : {n_check_all}");
+    println!("    - outputs              : {n_out}");
+    println!("  number of constants      : {n_consts}");
+    println!("============================================");
 }
 
 struct ParseRes {

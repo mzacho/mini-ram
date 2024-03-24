@@ -6,5 +6,6 @@ pkgs.mkShell {
     graphviz
     imagemagick
     protobuf
+    time
   ];
 }

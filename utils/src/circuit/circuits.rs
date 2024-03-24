@@ -186,7 +186,7 @@ pub fn check_all_eq_but_one() -> Circuit<u64> {
     let x = ARG0;
     let mut b = Builder::new(n_in);
     let xs = &[(ARG0 + 1, ARG0 + 2), (ARG0 + 3, ARG0 + 4)];
-    let x0 = b.check_all_eq_but_one(x, xs);
+    let _ = b.check_all_eq_but_one(x, xs);
     b.build(&[])
 }
 

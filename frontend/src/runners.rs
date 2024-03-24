@@ -13,28 +13,34 @@ pub fn run_p(
     port_vole: u16,
     c: Circuit<u64>,
     w: Vec<u64>,
-    ctx: ProofCtx,
+    mut ctx: ProofCtx,
 ) -> std::io::Result<()> {
     print!("Prover: Connecting to VOLE dealer on port {port_vole}... ");
     let stream_vole = TcpStream::connect(format!("127.0.0.1:{port_vole}"))?;
     println!("Connected.");
-    print!("Prover: Listening for on port {port} verifier... ");
+    print!("Prover: Listening for verifier on port {port}... ");
     let listener = TcpListener::bind(format!("127.0.0.1:{port}"))?;
     let stream_other = listener.accept()?;
+    println!("Verifier connected.");
 
     let chan = ProverTcpChannel::new(stream_other.0, stream_vole);
+    println!("Running prove64");
+    ctx.start_time("prover");
     prove64(c, w, chan, ctx);
     Ok(())
 }
 
-pub fn run_v(port: u16, port_vole: u16, c: Circuit<u64>, ctx: ProofCtx) -> std::io::Result<()> {
+pub fn run_v(port: u16, port_vole: u16, c: Circuit<u64>, mut ctx: ProofCtx) -> std::io::Result<()> {
     print!("Verifier: Connecting to VOLE dealer on port {port_vole}... ");
     let stream_vole = TcpStream::connect(format!("127.0.0.1:{port_vole}"))?;
     println!("Connected.");
     print!("Verifier: Connecting to prover on port {port}... ");
     let stream_other = TcpStream::connect(format!("127.0.0.1:{port}"))?;
+    println!("Connected.");
 
+    println!("Running verify64");
     let chan = VerifierTcpChannel::new(stream_other, stream_vole);
+    ctx.start_time("verifier");
     verify64(c, chan, ctx);
     Ok(())
 }
@@ -55,15 +61,24 @@ pub fn run_vole(port: u16, mut ctx: ProofCtx) -> std::io::Result<()> {
     println!("Sending delta={delta} to verifier");
     snd_delta(&mut stream_v, delta)?;
 
+    println!("Sending correlations to both parties...");
+    let one_tenth_done = n / 10;
+    let mut ctr = 0;
+    ctx.start_time("vole");
     for i in 0..n {
+        if i % one_tenth_done == 0 {
+            println!("  [progress] {ctr}%");
+            ctr += 10;
+        }
         let r = ctx.next_u64();
         let k = ctx.next_u64();
         let m = delta.wrapping_mul(r).wrapping_add(k);
-        println!("  i={i}: Sending r={r}, m={m} to prover");
+        // println!("  i={i}: Sending r={r}, m={m} to prover");
         snd_extend_mac(&mut stream_p, r, m)?;
-        println!("       Sending k={k} to verifier");
+        // println!("       Sending k={k} to verifier");
         snd_extend_key(&mut stream_v, k)?;
     }
+    ctx.stop_time();
     println!("Done, exiting.");
     Ok(())
 }
