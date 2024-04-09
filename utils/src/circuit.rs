@@ -191,6 +191,7 @@ pub fn eval64(c: &Circuit<u64>, mut wires: Vec<u64>) -> Vec<u64> {
                 // outw: sum 2^{i-1}*xi
                 //
                 // assumse xs are all bits so no overflow happens.
+                // TODO: Assert that xs are bits
                 for k in 0..4 {
                     let xk = wires[gates[i] - ARG0];
                     res += 2u64.pow(k) * xk;
@@ -202,6 +203,7 @@ pub fn eval64(c: &Circuit<u64>, mut wires: Vec<u64>) -> Vec<u64> {
                 // outw: sum 2^{i-1}*xi
                 //
                 // assumse xs are all bits so no overflow happens.
+                // TODO: Assert that xs are bits
                 for k in 0..8 {
                     let xk = wires[gates[i] - ARG0];
                     res += 2u64.pow(k) * xk;
@@ -213,6 +215,7 @@ pub fn eval64(c: &Circuit<u64>, mut wires: Vec<u64>) -> Vec<u64> {
                 // outw: sum 2^{i-1}*xi
                 //
                 // assumse xs are all bits so no overflow happens.
+                // TODO: Assert that xs are bits
                 for k in 0..32 {
                     let xk = wires[gates[i] - ARG0];
                     res += 2u64.pow(k) * xk;
