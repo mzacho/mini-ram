@@ -3,8 +3,16 @@ use self::reg::{PC, R1};
 use super::lang::Inst::*;
 use super::lang::*;
 
-/// encoded instruction
-/// todo: describe format
+/// Type of an encoded instruction.
+///
+/// Intructions are encoded into a 64 bit word consisting of
+/// 4 fields:
+///
+///   #1 (8 bits): opcode          - only uses 6 bits
+///   #2 (8 bits): dst  (register) - only uses 4 bits
+///   #3 (8 bits): arg0 (register) - only uses 4 bits
+///   #4 (8 bits): unused
+///   #5 (32 bits): arg1 (register or word)
 type EInst64 = u64;
 
 pub type EProg = Vec<EInst64>;

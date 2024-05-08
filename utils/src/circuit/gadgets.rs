@@ -167,32 +167,46 @@ fn switch<T>(b: &mut Builder<T>, x: usize, y: usize, z: usize, one: usize) -> (u
     (c, d)
 }
 
-/// Decodes instr as encoded by frontend::miniram::encode::encode_instr_u64
+/// Decodes lower 32 bit instr as encoded by frontend::miniram::encode::encode_instr_u64
 ///
-/// Input: i, the (index of the) constant holding the 64 bit
-/// instruction.
-pub fn decode_instr64(
-    b: &mut Builder<u64>,
+/// Input: i, the (index of the) constant holding the lower 32 bit
+/// of the instruction.
+pub fn decode_lo_instr32<T>(
+    b: &mut Builder<T>,
     i: usize,
-) -> (usize, usize, usize, usize, usize, usize, usize, usize) {
-    //b.debug();
-    // Destruct instruction into its bit-decomposition
-    let i0 = b.decode64(i);
-
-    let op = b.encode8(i0 + 56);
-    // lsb of op is 1 only for LDR
-    let is_load = i0 + 56;
-    // next most lsb of op is 1 only for LDR/ STR
-    let is_mem = i0 + 57;
-    // op >> 5 is 1 only if op is RET
-    let is_ret = i0 + (56 + 5);
-
-    let dst = b.encode4(i0 + 48);
-    let arg0 = b.encode4(i0 + 40);
+) -> (usize, usize) {
+    let i0 = b.decode32(i);
     let arg1 = b.encode4(i0);
-    let arg1_word = b.encode32(i0);
-    (op, dst, arg0, arg1, arg1_word, is_mem, is_load, is_ret)
+    let arg1_word = i;
+    (arg1, arg1_word)
 }
+
+/// Decodes high 32 bit instr as encoded by
+/// frontend::miniram::encode::encode_instr_u64
+///
+/// Input: i, the (index of the) constant holding the high 32 bit
+/// of the instruction.
+pub fn decode_hi_instr32<T>(
+    b: &mut Builder<T>,
+    i: usize,
+) -> (usize, usize, usize, usize, usize, usize) {
+    // b.dbg()
+    // Destruct instruction into its bit-decomposition
+    let i0 = b.decode32(i);
+
+    let op = b.encode8(i0 + 24);
+    // lsb of op is 1 only for LDR
+    let is_load = i0 + 24;
+    // next most lsb of op is 1 only for LDR/ STR
+    let is_mem = i0 + 25;
+    // op >> 5 is 1 only if op is RET
+    let is_ret = i0 + (24 + 5);
+
+    let dst = b.encode4(i0 + 16);
+    let arg0 = b.encode4(i0 + 8);
+    (op, dst, arg0, is_mem, is_load, is_ret)
+}
+
 
 #[cfg(test)]
 mod tests {

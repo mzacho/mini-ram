@@ -229,7 +229,7 @@ fn inc_pc(st: &mut Store) {
     st[usize::from(PC)] += 1
 }
 
-/// Add arguments to addresses 0, 1, ..., args.len() in mem
+/// Add arguments to addresses 0, 1, ..., args.len()-1 in mem
 fn init_mem(args: Vec<Word>) -> Mem {
     let mut mem = Mem::new();
     for (k, v) in args.into_iter().enumerate() {

@@ -4,7 +4,7 @@ use utils::circuit::*;
 use crate::quicksilver::vole;
 use crate::ProofCtx;
 
-pub fn verify64(c: Circuit<u64>, mut chan: VerifierTcpChannel, mut ctx: ProofCtx) {
+pub fn verify32(c: Circuit<u32>, mut chan: VerifierTcpChannel, mut ctx: ProofCtx) {
     //let n_in = w.len();
     let n_gates = c.n_gates;
     let n_in = c.n_in;
@@ -12,13 +12,11 @@ pub fn verify64(c: Circuit<u64>, mut chan: VerifierTcpChannel, mut ctx: ProofCtx
     let n_select = c.n_select;
     let n_select_const = c.n_select_const;
     let n_decode32 = c.n_decode32;
-    let n_decode64 = c.n_decode64;
     let n_check_all_eq_but_one = c.n_check_all_eq_but_one;
     let check_mul = (n_mul > 0)
         || (n_select > 0)
         || (n_select_const > 0)
         || (n_decode32 > 0)
-        || (n_decode64 > 0)
         || (n_check_all_eq_but_one > 0);
 
     let segments = &vole::Segments {
@@ -27,7 +25,6 @@ pub fn verify64(c: Circuit<u64>, mut chan: VerifierTcpChannel, mut ctx: ProofCtx
             + n_select * 2
             + n_select_const
             + n_decode32 * 32
-            + n_decode64 * 64
             + n_check_all_eq_but_one,
         n_mul_check: if check_mul { 1 } else { 0 },
     };
@@ -54,14 +51,14 @@ pub fn verify64(c: Circuit<u64>, mut chan: VerifierTcpChannel, mut ctx: ProofCtx
     // output of mult. gates. This is unused in eval if circuit
     // doesen't have any multiplication or select gates and therefore
     // won't be send it this case.
-    let x = ctx.next_u64();
+    let x = ctx.next_u128();
     if check_mul {
         chan.send_challenge(x);
     }
 
     let wires = Wires {
         zm: vole.ks_in,
-        z2: vec![],
+        // z2: vec![],
     };
 
     ctx.start_time("evaluating circuit");
@@ -74,7 +71,7 @@ pub fn verify64(c: Circuit<u64>, mut chan: VerifierTcpChannel, mut ctx: ProofCtx
         let u = chan.recv_u();
         let v = chan.recv_v();
         let uv = u.wrapping_sub(v.wrapping_mul(delta));
-        assert_eq!(w.wrapping_add(vole.ks_mul_check[0]), uv)
+        assert_eq!(w.wrapping_add(vole.ks_mul_check[0]), uv);
     }
 
     println!("Receiving openings (macs) of {n} output values.");
@@ -90,19 +87,19 @@ pub fn verify64(c: Circuit<u64>, mut chan: VerifierTcpChannel, mut ctx: ProofCtx
 
 #[allow(dead_code)]
 struct Wires {
-    zm: Vec<u64>,
-    z2: Vec<u64>,
+    zm: Vec<u128>,
+    // z2: Vec<u64>,
 }
 
-type W = u64;
-type Key = u64;
+type W = u128;
+type Key = u128;
 
 fn eval(
-    c: &Circuit<u64>,
+    c: &Circuit<u32>,
     mut wires: Wires,
-    delta: u64,
-    challenge: u64,
-    mul_keys: Vec<u64>,
+    delta: u128,
+    challenge: u128,
+    mul_keys: Vec<u128>,
     chan: &mut VerifierTcpChannel,
 ) -> (W, Vec<Key>) {
     let gates = &c.gates;
@@ -110,14 +107,14 @@ fn eval(
     let n_gates = c.n_gates;
 
     let mut outputs = vec![];
-    let mut w: u64 = 0;
+    let mut w: Key = 0;
 
     let mut i = 0; // ctr gate
     let mut t = 0; // ctr mul/ select
     for _ in 0..n_gates {
         let op = gates[i];
         i += 1;
-        let mut res: u64 = 0;
+        let mut res: Key = 0;
         match op {
             // --- binary ops
             OP_XOR => {
@@ -195,22 +192,22 @@ fn eval(
                 // outw: c * x
                 let c = consts[gates[i] - ARG0];
                 let x = wires.zm[gates[i + 1] - ARG0];
-                res = c.wrapping_mul(x);
+                res = (c as Key).wrapping_mul(x);
                 i += 2;
             }
             OP_SELECT => {
                 // args: idi, idx1, idx2, ..., idxn where i <= n
                 // outw: xi
-                let mut kbs: u64 = 0;
+                let mut kbs: Key = 0;
                 let ki = wires.zm[gates[i] - ARG0];
                 res = 0;
                 i += 1;
-                let mut j: u64 = 0;
+                let mut j: Key = 0;
                 while gates[i] >= ARG0 {
                     let kxj = wires.zm[gates[i] - ARG0];
                     let kbj = mul_keys[t];
                     let kxjbj = mul_keys[t + 1];
-                    let kj = 0u64.wrapping_sub(delta.wrapping_mul(j));
+                    let kj = 0u128.wrapping_sub(delta.wrapping_mul(j));
 
                     // Verify bj*(i-j) = 0
                     let b = kbj.wrapping_mul(ki.wrapping_sub(kj));
@@ -239,17 +236,18 @@ fn eval(
             OP_SELECT_CONST => {
                 // args: idi, idc1, idc2, ..., idcn where i <= n
                 // outw: ci
-                let mut kbs: u64 = 0;
+                let mut kbs: Key = 0;
                 let ki = wires.zm[gates[i] - ARG0];
                 res = 0;
                 i += 1;
-                let mut j: u64 = 0;
+                let mut j: Key = 0;
                 while gates[i] >= ARG0 {
                     let cj = consts[gates[i] - ARG0];
-                    let kcj = 0u64.wrapping_sub(delta.wrapping_mul(cj));
+                    let kcj =
+                    0u128.wrapping_sub(delta.wrapping_mul(cj as Key));
                     let kbj = mul_keys[t];
-                    let kcjbj = cj.wrapping_mul(kbj);
-                    let kj = 0u64.wrapping_sub(delta.wrapping_mul(j));
+                    let kcjbj = (cj as Key).wrapping_mul(kbj);
+                    let kj = 0u128.wrapping_sub(delta.wrapping_mul(j));
 
                     // Verify bj*(i-j) = 0
                     let b = kbj.wrapping_mul(ki.wrapping_sub(kj));
@@ -273,16 +271,16 @@ fn eval(
                 // args: x where x < 2^32
                 // outw: idx1, idx2, ..., idxn s.t sum 2^{i-1}*xi
                 let kx = wires.zm[gates[i] - ARG0];
-                let mut sum: u64 = 0;
+                let mut sum: Key = 0;
                 for i in 0..32 {
                     let kxi = mul_keys[t];
 
                     // Verify xi(1-xi) = 0
-                    let k1 = 0u64.wrapping_sub(delta);
+                    let k1 = 0u128.wrapping_sub(delta);
                     let b = kxi.wrapping_mul(k1.wrapping_sub(kxi));
                     w = w.wrapping_add(b);
 
-                    sum = sum.wrapping_add(2u64.pow(i).wrapping_mul(kxi));
+                    sum = sum.wrapping_add(2u128.pow(i).wrapping_mul(kxi));
 
                     if i != 31 {
                         wires.zm.push(kxi);
@@ -298,33 +296,7 @@ fn eval(
                 i += 1;
             }
             OP_DECODE64 => {
-                // args: x where x < 2^64
-                // outw: idx1, idx2, ..., idxn s.t sum 2^{i-1}*xi
-                let kx = wires.zm[gates[i] - ARG0];
-                let mut sum: u64 = 0;
-                for i in 0..64 {
-                    let kxi = mul_keys[t];
-
-                    // Verify xi(1-xi) = 0
-                    let k1 = 0u64.wrapping_sub(delta);
-                    let b = kxi.wrapping_mul(k1.wrapping_sub(kxi));
-                    // todo: pow challenge
-                    w = w.wrapping_add(b);
-
-                    sum = sum.wrapping_add(2u64.pow(i).wrapping_mul(kxi));
-
-                    if i != 63 {
-                        wires.zm.push(kxi);
-                        t += 1;
-                    } else {
-                        res = kxi;
-                        t += 1;
-                    }
-                }
-                // Verify sum - x opens to 0
-                let mac = chan.recv_mac();
-                assert_eq!(mac, sum.wrapping_sub(kx));
-                i += 1;
+                panic!("unsupported")
             }
             OP_ENCODE4 => {
                 // args: idx1, idx2, idx3, idx4
@@ -334,7 +306,7 @@ fn eval(
                 res = 0;
                 for k in 0..4 {
                     let key = wires.zm[gates[i] - ARG0];
-                    res = res.wrapping_add(2u64.pow(k).wrapping_mul(key));
+                    res = res.wrapping_add(2u128.pow(k).wrapping_mul(key));
                     i += 1;
                 }
             }
@@ -346,7 +318,7 @@ fn eval(
                 res = 0;
                 for k in 0..8 {
                     let key = wires.zm[gates[i] - ARG0];
-                    res = res.wrapping_add(2u64.pow(k).wrapping_mul(key));
+                    res = res.wrapping_add(2u128.pow(k).wrapping_mul(key));
                     i += 1;
                 }
             }
@@ -358,7 +330,7 @@ fn eval(
                 res = 0;
                 for k in 0..32 {
                     let key = wires.zm[gates[i] - ARG0];
-                    res = res.wrapping_add(2u64.pow(k).wrapping_mul(key));
+                    res = res.wrapping_add(2u128.pow(k).wrapping_mul(key));
                     i += 1;
                 }
             }
@@ -385,7 +357,7 @@ fn eval(
                 // args: idc
                 // outw: c
                 let c = consts[gates[i] - ARG0];
-                res = 0u64.wrapping_sub(delta.wrapping_mul(c));
+                res = 0u128.wrapping_sub(delta.wrapping_mul(c as Key));
                 i += 1;
             }
             OP_OUT => {
@@ -406,14 +378,14 @@ fn eval(
                 // args: idi, idx1, idy1, idx2, idy2,..., idxn, idyn
                 // asserts: xj = yj for j != i
                 let ki = wires.zm[gates[i] - ARG0];
-                let mut sum: u64 = 0;
-                let mut j: u64 = 0;
+                let mut sum: Key = 0;
+                let mut j: Key = 0;
                 i += 1;
                 while gates[i] >= ARG0 {
                     let kxj = wires.zm[gates[i] - ARG0];
                     let kyj = wires.zm[gates[i + 1] - ARG0];
-                    let kj = 0u64.wrapping_sub(delta.wrapping_mul(j));
-                    let k1 = 0u64.wrapping_sub(delta);
+                    let kj = 0u128.wrapping_sub(delta.wrapping_mul(j));
+                    let k1 = 0u128.wrapping_sub(delta);
                     let kbj = mul_keys[t];
 
                     // Verify that (bj-1)*(i-j) opens to 0
@@ -456,16 +428,16 @@ fn eval(
 fn preprocess_vole(
     chan: &mut VerifierTcpChannel,
     segs: &vole::Segments,
-) -> (u64, vole::CorrReceiver) {
+) -> (u128, vole::CorrReceiver) {
     let delta = chan.recv_delta_from_dealer();
-    println!("Received delta={delta}");
+    //println!("Received delta={delta}");
 
     let ks_in = chan.recv_extend_vole_zm(segs.n_in);
-    // println!("  Received ks_in={ks_in:?}");
+    //println!("  Received ks_in={ks_in:?}");
     let ks_mul = chan.recv_extend_vole_zm(segs.n_mul);
-    // println!("  Received ks_mul={ks_mul:?}");
+    //println!("  Received ks_mul={ks_mul:?}");
     let ks_mul_check = chan.recv_extend_vole_zm(segs.n_mul_check);
-    // println!("  Received ks_mul_check={ks_mul_check:?}");
+    //println!("  Received ks_mul_check={ks_mul_check:?}");
 
     (
         delta,

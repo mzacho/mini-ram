@@ -49,7 +49,7 @@ fn main() {
         }) => {
             println!("Successfully parsed args");
 
-            let deterministic = false;
+            let deterministic = true;
             let mut ctx = if deterministic {
                 ProofCtx::new_deterministic()
             } else {
@@ -148,16 +148,6 @@ fn main() {
                                 let w = vec![0];
                                 (c, w)
                             }
-                            "decode64" => {
-                                let c = circuits::decode64();
-                                let w = vec![0];
-                                (c, w)
-                            }
-                            "decode64_2" => {
-                                let c = circuits::decode64_2(8);
-                                let w = vec![256];
-                                (c, w)
-                            }
                             "w_all_eq_but_one" => {
                                 let c = circuits::check_all_eq_but_one();
                                 let w = vec![1, 43, 43, 2, 3];
@@ -202,7 +192,6 @@ fn print_circuit_stats<T>(c: &Circuit<T>) {
     let n_gates = c.gates.len();
     let n_select = c.n_select;
     let n_decode32 = c.n_decode32;
-    let n_decode64 = c.n_decode64;
     let n_check_all = c.n_check_all_eq_but_one;
     let n_consts = c.consts.len();
     let n_out = c.n_out;
@@ -210,9 +199,8 @@ fn print_circuit_stats<T>(c: &Circuit<T>) {
     println!("  number of inputs         : {n_in}");
     println!("  number of gates          : {n_gates}");
     println!("    - multiplication       : {n_mul}");
-    println!("    - selects              : {n_select}");
+    println!("    - selects alts.        : {n_select}");
     println!("    - decode32             : {n_decode32}");
-    println!("    - decode64             : {n_decode64}");
     println!("    - check all eq but one : {n_check_all}");
     println!("    - outputs              : {n_out}");
     println!("  number of constants      : {n_consts}");

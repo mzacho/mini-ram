@@ -10,7 +10,6 @@ use super::OP_CONST;
 use super::OP_CONV_A2B;
 use super::OP_CONV_B2A;
 use super::OP_DECODE32;
-use super::OP_DECODE64;
 use super::OP_ENCODE32;
 use super::OP_ENCODE4;
 use super::OP_ENCODE8;
@@ -34,7 +33,6 @@ pub struct Builder<T> {
     n_select: usize,
     n_select_const: usize,
     n_decode32: usize,
-    n_decode64: usize,
     n_check_all_eq_but_one: usize,
     offset_arg0: bool,
     enable_z2_ops: bool,
@@ -58,8 +56,6 @@ pub struct Res<T> {
     pub n_select_const: usize,
     /// Number of decode32 gates
     pub n_decode32: usize,
-    /// Number of decode64 gates
-    pub n_decode64: usize,
     /// Number of check_all_eq_but_one pairs
     pub n_check_all_eq_but_one: usize,
 }
@@ -78,7 +74,6 @@ impl<T> Builder<T> {
             n_select: 0,
             n_select_const: 0,
             n_decode32: 0,
-            n_decode64: 0,
             n_check_all_eq_but_one: 0,
             offset_arg0: false,
             enable_z2_ops: false,
@@ -274,17 +269,6 @@ impl<T> Builder<T> {
         self.cursor_wires - 32
     }
 
-    pub fn decode64(&mut self, x: usize) -> usize {
-        #[cfg(test)]
-        self.validate();
-        self.gates.push(OP_DECODE64);
-        self.gates.push(x);
-        self.n_gates += 1;
-        self.n_decode64 += 1;
-        self.cursor_wires += 64;
-        self.cursor_wires - 64
-    }
-
     pub fn encode8(&mut self, x0: usize) -> usize {
         #[cfg(test)]
         self.validate();
@@ -440,7 +424,6 @@ impl<T> Builder<T> {
             n_select: self.n_select,
             n_select_const: self.n_select_const,
             n_decode32: self.n_decode32,
-            n_decode64: self.n_decode64,
             n_check_all_eq_but_one: self.n_check_all_eq_but_one,
         }
     }

@@ -7,12 +7,12 @@ use utils::{permutation, waksman};
 
 use utils::circuit::{
     builder::{self, Builder},
-    gadgets, ARG0,
+    gadgets, ARG0, ARG1
 };
 
 use super::encode::encode;
 
-type Witness = Vec<u64>;
+type Witness = Vec<Word>;
 
 /// Encodes args as a witness for the correct execution of the
 /// MiniRAM program prog (i.e a 0 evaluation).
@@ -37,19 +37,21 @@ pub fn encode_witness(prog: &Prog, args: Vec<Word>, t: usize, ctx: &mut ProofCtx
 /// Convert the local states to the witness, which is a vector W of
 /// values from the circuit layed out as
 ///
-///   W = S1, S2, ..., St, S'1, S'2, ..., S't, c1, ..., ck
+///   W = S1, S2, ..., St, c1, ..., ck
 ///
 /// where Si represents the i'th local state with the value of the CPU
 ///
 ///   Si = pc, r1, ..., r15, Z
 ///
-/// and where the S'1, S'2, ..., S't = sort(S1, S2, ..., St)
-/// according to memory accesses with ties broken by timestamp and
+/// and where c1, ..., ck is the configuration of the AS-Waksman network
+/// that sorts S1, S2, ..., St according to memory accesses with
+/// ties broken by timestamp.
+///
+/// TODO: fix docs of:
+///
 /// encoded as
 ///
 ///   S'j = i, addr_i, val_i, is_load_i
-///
-/// where
 ///
 ///   - i         is the timestamp (step index, i.e the states
 ///               original index in the trace) of the operation.
@@ -60,18 +62,17 @@ pub fn encode_witness(prog: &Prog, args: Vec<Word>, t: usize, ctx: &mut ProofCtx
 ///   - val_i     is the value read/ written
 ///
 ///   - is_load_i is 1 only if the operation was a LDR
-///
-/// Finally, c1, ..., ck is the configuration of the AS-Waksman network
-/// that performs the sorting permutation.
 fn convert_localstates(lsts: Vec<LocalStateAug>, ctx: &mut ProofCtx) -> Witness {
     let mut res = vec![];
     // Push S1, S2, ..., St
     for s in lsts.iter() {
         for val in s.st.0 {
-            res.push(u64::from(val))
+            // Push value of registers
+            res.push(val)
         }
         for flag in s.st.1 {
-            res.push(u64::from(flag))
+            // Push value of conditional flags
+            res.push(Word::from(flag))
         }
     }
     // Compute the permutation that sorts the states according to
@@ -83,7 +84,9 @@ fn convert_localstates(lsts: Vec<LocalStateAug>, ctx: &mut ProofCtx) -> Witness 
     // Push configuration of permutation network
     ctx.start_time("route sorting permutation of witness");
     for c in waksman::route(&p.inverse()) {
-        res.push(u64::from(c));
+        // TODO: Coniguration could maybe be packed? Seems a bit
+        // overkill to use a ring element per bit
+        res.push(Word::from(c));
     }
     ctx.stop_time();
 
@@ -92,7 +95,7 @@ fn convert_localstates(lsts: Vec<LocalStateAug>, ctx: &mut ProofCtx) -> Witness 
     res
 }
 
-/// Number of circuit elements (u64) in one LocalState of the trace
+/// Number of circuit elements (u32) in one LocalState of the trace
 const SIZE_LOCAL_ST: usize = N_REG + N_CFL;
 
 /// Generates a circuit for verifying the existence of an input
@@ -100,31 +103,36 @@ const SIZE_LOCAL_ST: usize = N_REG + N_CFL;
 /// t.
 ///
 /// todo: Currently the program is hardcoded into the circuit as a
-/// constant. Change to Von Neumann type architecture.
-pub fn generate_circuit(prog: &Prog, t: usize) -> builder::Res<u64> {
-    let n_in = t * SIZE_LOCAL_ST + waksman::conf_len(t);
+/// constant. If time permits, it would be nice to change this to a
+/// Von Neumann type architecture.
+pub fn generate_circuit(prog: &Prog, time_bound: usize) -> builder::Res<Word> {
+    let n_in = time_bound * SIZE_LOCAL_ST + waksman::conf_len(time_bound);
 
     // id of first permutation network config
-    let in_pconf = t * SIZE_LOCAL_ST + ARG0;
+    let in_pconf = time_bound * SIZE_LOCAL_ST + ARG0;
 
     let mut b = builder::Builder::new(n_in);
     let mut outputs = vec![];
 
     // hard-code program
     let p = encode(prog);
-    let l = p.len();
+    let n_instr = p.len();
     for instr in p {
-        let _ = b.push_const(instr);
+        let lo = instr as u32;
+        let hi = (instr >> 32) as u32;
+        let _ = b.push_const(hi);
+        let _ = b.push_const(lo);
         // id of constant gate can be ignored: As the gates are the
-        // first to be added to the circuit, we just use i as the
-        // id of the i'th (zero indexed) instruction when needed.
+        // first to be added to the circuit, we just use 2i || 2i+1
+        // as the (zero indexed) instruction.
     }
 
     // push constants
-    let zero = b.push_const(0);
-    let one = b.push_const(1);
-    let zero = b.const_(zero);
-    let one = b.const_(one);
+    let id_zero = b.push_const(0);
+    let id_one = b.push_const(1);
+    let id_two = b.push_const(2);
+    let zero = b.const_(id_zero);
+    let one = b.const_(id_one);
 
     // input of permutation networks
     let mut perm_in_0 = vec![];
@@ -142,8 +150,9 @@ pub fn generate_circuit(prog: &Prog, t: usize) -> builder::Res<u64> {
     perm_in_2.push(v);
     perm_in_3.push(is_load);
 
-    for i in 1..t {
-        let (mut o, adr, v, is_load) = trans_circ(&mut b, i - 1, l, one);
+    for step in 1..time_bound {
+        let (mut o, adr, v, is_load) = trans_circ(&mut b, step - 1,
+        n_instr, one, id_two);
         ctr = b.add(&[ctr, one]);
         outputs.append(&mut o);
         perm_in_0.push(ctr);
@@ -159,9 +168,9 @@ pub fn generate_circuit(prog: &Prog, t: usize) -> builder::Res<u64> {
     let (po2, _) = gadgets::waksman(&mut b, &perm_in_2, conf, one);
     let (po3, _) = gadgets::waksman(&mut b, &perm_in_3, conf, one);
 
-    for i in 1..t {
-        let x = (po0[i - 1], po1[i - 1], po2[i - 1], po3[i - 1]);
-        let y = (po0[i], po1[i], po2[i], po3[i]);
+    for step in 1..time_bound {
+        let x = (po0[step - 1], po1[step - 1], po2[step - 1], po3[step - 1]);
+        let y = (po0[step], po1[step], po2[step], po3[step]);
         let mut o = mem_consistency_circ(&mut b, x, y, one);
         outputs.append(&mut o);
     }
@@ -185,7 +194,7 @@ pub fn generate_circuit(prog: &Prog, t: usize) -> builder::Res<u64> {
 /// memory. This is also convenient for reading program arguments,
 /// that the memory is initialized with.
 fn mem_consistency_circ(
-    b: &mut Builder<u64>,
+    b: &mut Builder<Word>,
     x: (usize, usize, usize, usize),
     y: (usize, usize, usize, usize),
     one: usize,
@@ -234,15 +243,17 @@ fn mem_consistency_circ(
 ///
 ///  - is_load  is 1 only if the current instruction was a LDR
 fn fst_trans_circ(
-    b: &mut builder::Builder<u64>,
+    b: &mut builder::Builder<Word>,
     zero: usize,
     one: usize,
 ) -> (Vec<usize>, usize, usize, usize) {
     // Fetch first instruction
-    let instr = b.const_(ARG0);
+    let instr_hi = b.const_(ARG0);
+    let instr_lo = b.const_(ARG1);
 
     // Decode it
-    let (op, dst, _, _, arg1_word, is_mem, is_load, is_ret) = gadgets::decode_instr64(b, instr);
+    let (op, dst, _, is_mem, is_load, is_ret) = gadgets::decode_hi_instr32(b, instr_hi);
+    let (_, arg1_word) = gadgets::decode_lo_instr32(b, instr_lo);
 
     let is_str = b.xor_bits(&[is_mem, is_load]);
 
@@ -307,13 +318,16 @@ fn fst_trans_circ(
 /// - b: builder with the source code as constants
 /// - i: iteration count (0 <= i < time bound t)
 /// - l: number of lines of source code
+/// - one: index of constant one
+/// - two: index of constant two
 ///
 /// Returns: the same as first_transition_circuit
 fn trans_circ(
-    b: &mut builder::Builder<u64>,
+    b: &mut builder::Builder<Word>,
     i: usize,
     l: usize,
     one: usize,
+    id_two: usize
 ) -> (Vec<usize>, usize, usize, usize) {
     let k0 = i * SIZE_LOCAL_ST + ARG0;
     let k1 = (i + 1) * SIZE_LOCAL_ST + ARG0;
@@ -321,11 +335,14 @@ fn trans_circ(
 
     // Fetch instruction
     let pc = k0 + usize::from(PC);
-    let instr = b.select_const_range(pc, ARG0, ARG0 + l, 1);
+    let pc_hi = b.mul_const(id_two, pc);
+    let pc_lo = b.add(&[one, pc_hi]);
+    let instr_hi = b.select_const_range(pc_hi, ARG0, ARG0 + 2*l, 1);
+    let instr_lo = b.select_const_range(pc_lo, ARG0, ARG0 + 2*l+1, 1);
 
     // Decode instruction
-    let (op, dst, arg0, arg1, arg1_word, is_mem, is_load, is_ret) =
-        gadgets::decode_instr64(b, instr);
+    let (op, dst, arg0, is_mem, is_load, is_ret) = gadgets::decode_hi_instr32(b, instr_hi);
+    let (arg1, arg1_word) = gadgets::decode_lo_instr32(b, instr_lo);
 
     let is_str = b.xor_bits(&[is_mem, is_load]);
 
@@ -350,7 +367,7 @@ fn trans_circ(
     let (res, z) = alu(b, alu_in, dst_out, one);
 
     // Ouput res-dst_out and z-cfl_out - both should be zero if the
-    // witness to satisfies the circuit.
+    // witness satisfies the circuit.
     let check_alu = b.sub(res, dst_out);
     let check_cfl = b.sub(z, cfl_z_out);
 
@@ -379,7 +396,8 @@ fn trans_circ(
     // Compute the the value read/ written for LDR/STR instructions.
     // The value is only used if is_load is set, so garbage is sent
     // for instructions that don't access memory.
-    let tmp1 = b.mul(is_load, dst_out);
+    let tmp1 = b.mul
+        (is_load, dst_out);
     let tmp2 = b.sub(one, is_load);
     let tmp3 = b.mul(tmp2, dst_in);
     let mem_val = b.add(&[tmp1, tmp3]);
@@ -411,7 +429,7 @@ struct AluIn {
 ///   memory operation (which are checked by a seperate memory
 ///   consistency circuit)
 ///   - z: is the boolean value of the Z flag.
-fn alu(b: &mut Builder<u64>, in_: AluIn, dst_out: usize, one: usize) -> (usize, usize) {
+fn alu(b: &mut Builder<Word>, in_: AluIn, dst_out: usize, one: usize) -> (usize, usize) {
     // Compute each possible operation of the architecture in order
     // of the encoding of opcodes. Then select the correct value
     // using the opcode.
@@ -432,8 +450,7 @@ fn alu(b: &mut Builder<u64>, in_: AluIn, dst_out: usize, one: usize) -> (usize, 
     let a32 = in_.arg1; // ret register
     let a36 = in_.arg1_word; // ret constant
 
-    // used to trigger a run-time panic if this argument is returned
-    // as res. todo: select(in_.op / 4, ids) instead
+    // todo: select(in_.op / 4, ids) instead
     let mut ids = [ARG0; 37];
     ids[2] = a2;
     ids[3] = a3;
@@ -463,7 +480,7 @@ fn alu(b: &mut Builder<u64>, in_: AluIn, dst_out: usize, one: usize) -> (usize, 
 #[cfg(test)]
 mod test {
     use backend::ProofCtx;
-    use utils::circuit::eval64;
+    use utils::circuit::eval32;
 
     use crate::miniram::lang::Prog;
     use crate::miniram::lang::Word;
@@ -709,12 +726,12 @@ mod test {
         assert_eq!(vec![0; res.len()], res);
     }
 
-    fn convert_and_eval(p: &Prog, args: Vec<Word>, t: usize) -> Vec<u64> {
+    fn convert_and_eval(p: &Prog, args: Vec<Word>, t: usize) -> Vec<u32> {
         let c = &generate_circuit(p, t);
         //pp::print(c, None);
         let ctx = &mut ProofCtx::new_deterministic();
         let w = encode_witness(p, args, t, ctx).unwrap();
         // dbg!(&w);
-        eval64(c, w)
+        eval32(c, w)
     }
 }

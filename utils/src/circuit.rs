@@ -33,10 +33,12 @@ pub const OP_CHECK_ALL_EQ_BUT_ONE: usize = 15;
 
 pub const OP_DEBUG: usize = 20;
 
-/// Index of the first argument
+/// Index of the first two arguments
 pub const ARG0: usize = 23;
+pub const ARG1: usize = ARG0 + 1;
 
 use std::u64::MAX;
+use std::u32::MAX as U32MAX;
 
 pub use builder::Res as Circuit;
 
@@ -296,6 +298,246 @@ pub fn eval64(c: &Circuit<u64>, mut wires: Vec<u64>) -> Vec<u64> {
     out
 }
 
+/// Evaluate a circuit of u32 values
+pub fn eval32(c: &Circuit<u32>, mut wires: Vec<u32>) -> Vec<u32> {
+    // dbg!(c);
+    let gates = &c.gates;
+    let consts = &c.consts;
+    let n_gates = c.n_gates;
+    assert_eq!(c.n_in, wires.len());
+    assert_eq!(n_gates, count_ops(gates));
+    let mut out = Vec::new();
+    let mut i = 0;
+    for _ in 0..n_gates {
+        let op = gates[i];
+        i += 1;
+        let mut res = 0;
+        //dbg!(&op);
+        match op {
+            // --- binary ops
+            OP_XOR => {
+                // args: idx1, idx2, ..., idxn
+                // outw: x1 xor x2 xor ... xn
+                while gates[i] >= ARG0 {
+                    res ^= wires[gates[i] - ARG0];
+                    i += 1;
+                    if i >= gates.len() {
+                        // this gate was the last one
+                        break;
+                    }
+                }
+            }
+            OP_AND => {
+                // args: idx, idy
+                // outw: x and y
+                let lhs = wires[gates[i] - ARG0];
+                let rhs = wires[gates[i + 1] - ARG0];
+                res = lhs & rhs;
+                i += 2;
+            }
+            OP_AND_CONST => {
+                // args: idc, idx
+                // outw: x and c
+                let c = consts[gates[i] - ARG0];
+                let x = wires[gates[i + 1] - ARG0];
+                res = c & x;
+                i += 2;
+            }
+            // --- arithmetic ops
+            OP_ADD => {
+                // args: idx1, idx2, ..., idxn
+                // outw: x1 + x2 + ... xn
+                while gates[i] >= ARG0 {
+                    res = res.wrapping_add(wires[gates[i] - ARG0]);
+                    i += 1;
+                    if i >= gates.len() {
+                        break;
+                    }
+                }
+            }
+            OP_SUB => {
+                // args: idx, idy
+                // outw: x - y
+                let lhs = wires[gates[i] - ARG0];
+                let rhs = wires[gates[i + 1] - ARG0];
+                //dbg!(lhs, rhs);
+                res = lhs.wrapping_sub(rhs);
+                i += 2;
+            }
+            OP_MUL => {
+                // args: idx, idy
+                // outw: x * y
+                let lhs = wires[gates[i] - ARG0];
+                let rhs = wires[gates[i + 1] - ARG0];
+                //dbg!(lhs, rhs);
+                res = lhs.wrapping_mul(rhs);
+                i += 2;
+            }
+            OP_MUL_CONST => {
+                // args: idc, idx
+                // outw: c * x
+                dbg!(i, gates[i] - ARG0);
+                let c = consts[gates[i] - ARG0];
+                let x = wires[gates[i + 1] - ARG0];
+                res = c.wrapping_mul(x);
+                i += 2;
+            }
+            OP_SELECT => {
+                // args: idi, idx1, idx2, ..., idxn where i <= n
+                // outw: xi
+                let i_ = wires[gates[i] - ARG0];
+                let i_: usize = i_.try_into().ok().unwrap();
+                //dbg!(i_);
+                i += i_ + 1;
+                res = wires[gates[i] - ARG0];
+                while gates[i] >= ARG0 {
+                    i += 1;
+                    if i >= gates.len() {
+                        break;
+                    }
+                }
+            }
+            OP_SELECT_CONST => {
+                // args: idi, idc1, idc2, ..., idcn where i <= n
+                // outw: ci
+                let i_ = wires[gates[i] - ARG0];
+                let i_: usize = i_.try_into().ok().unwrap();
+                i += i_ + 1;
+                res = consts[gates[i] - ARG0];
+                while gates[i] >= ARG0 {
+                    i += 1;
+                    if i >= gates.len() {
+                        break;
+                    }
+                }
+            }
+            OP_DECODE32 => {
+                // args: x where x < 2^32
+                // outw: idx1, idx2, ..., idxn s.t sum 2^{i-1}*xi
+                let mut x = wires[gates[i] - ARG0];
+                //dbg!(x);
+                for _ in 1..32 {
+                    res = u32::from(x.trailing_ones() > 0);
+                    wires.push(res);
+                    x >>= 1;
+                }
+                res = u32::from(x.trailing_ones() > 0);
+                i += 1;
+            }
+            OP_DECODE64 => {
+                panic!("unsupported")
+            }
+            OP_ENCODE4 => {
+                // args: idx1, idx2, idx3, idx4
+                // outw: sum 2^{i-1}*xi
+                //
+                // assumse xs are all bits so no overflow happens.
+                // TODO: Assert that xs are bits
+                for k in 0..4 {
+                    let xk = wires[gates[i] - ARG0];
+                    res += 2u32.pow(k) * xk;
+                    i += 1;
+                }
+            }
+            OP_ENCODE8 => {
+                // args: idx1, idx2, ..., idx8
+                // outw: sum 2^{i-1}*xi
+                //
+                // assumse xs are all bits so no overflow happens.
+                // TODO: Assert that xs are bits
+                for k in 0..8 {
+                    let xk = wires[gates[i] - ARG0];
+                    res += 2u32.pow(k) * xk;
+                    i += 1;
+                }
+            }
+            OP_ENCODE32 => {
+                // args: idx1, idx2, ..., idx32
+                // outw: sum 2^{i-1}*xi
+                //
+                // assumse xs are all bits so no overflow happens.
+                // TODO: Assert that xs are bits
+                for k in 0..32 {
+                    let xk = wires[gates[i] - ARG0];
+                    res += 2u32.pow(k) * xk;
+                    i += 1;
+                }
+            }
+
+            // --- mixed ops
+            OP_CONV_A2B => {
+                // assert x in Z_{2^32} is a bit
+                let x = wires[gates[i] - ARG0];
+                assert!(x < 2);
+                // move result
+                res = x;
+                i += 1;
+            }
+            OP_CONV_B2A => {
+                // assert x in Z_{2^32} is a bit
+                let x = wires[gates[i] - ARG0];
+                // move result
+                res = x;
+                i += 1;
+            }
+            OP_CONST => {
+                // args: idc
+                // outw: c
+                res = consts[gates[i] - ARG0];
+                i += 1;
+            }
+            OP_OUT => {
+                // args: idx
+                // outw: none
+                // out: x
+                out.push(wires[gates[i] - ARG0]);
+                i += 1;
+            }
+            // --- verificatin ops
+            //  if check fails, adds 1 to output
+            //  if check succeeds, adds 0 to output
+            OP_CHECK_Z => (),   // noop
+            OP_CHECK_EQ => (),  // noop
+            OP_CHECK_AND => (), // noop
+            OP_CHECK_ALL_EQ_BUT_ONE => {
+                // args: idi, idx1, idy1, idx2, idy2,..., idxn, idyn
+                // asserts: xj = yj for j != i
+                let mut res_ = true;
+                let mut i_ = wires[gates[i] - ARG0];
+                // dbg!(i_);
+                i += 1;
+                while gates[i] > ARG0 {
+                    if i_ == 0 {
+                        i += 2;
+                        i_ = U32MAX;
+                        continue;
+                    }
+                    let x = wires[gates[i] - ARG0];
+                    let y = wires[gates[i + 1] - ARG0];
+                    // dbg!(x, y, i, gates[i], gates[i + 1]);
+                    res_ &= x == y;
+                    i += 2;
+                    i_ -= 1;
+                }
+                assert!(res_)
+            }
+            OP_DEBUG => {
+                dbg!("here");
+            }
+
+            _ => panic!("invalid operation"),
+        }
+        if (op != OP_OUT) & !is_check(op) & !matches!(op, OP_DEBUG) {
+            // dbg!(res);
+            wires.push(res);
+        }
+        // dbg!(&wires);
+    }
+    pp::print(c, Some(&wires));
+    out
+}
+
+
 /// Counts number of gates
 fn count_ops(gates: &[usize]) -> usize {
     let mut res = 0;
@@ -360,7 +602,6 @@ mod tests {
             n_select: 0,
             n_select_const: 0,
             n_decode32: 0,
-            n_decode64: 0,
             n_check_all_eq_but_one: 0,
         };
         let res = eval64(c, wires);
@@ -387,7 +628,6 @@ mod tests {
             n_select: 0,
             n_select_const: 0,
             n_decode32: 0,
-            n_decode64: 0,
             n_check_all_eq_but_one: 0,
         };
         let res = eval64(c, wires);
@@ -400,7 +640,7 @@ mod tests {
         // out: x1 xor x2 xor ... xor x32
         let x = ARG0;
         let mut b = Builder::new(1);
-        let x1 = b.decode64(x);
+        let x1 = b.decode32(x);
         let out = b.xor_bits(&(x1..x1 + 32).collect::<Vec<usize>>());
         let c = &b.build(&[out]);
 

@@ -5,19 +5,17 @@ use utils::channel::*;
 
 use crate::ProofCtx;
 
-pub fn prove64(c: Circuit<u64>, w: Vec<u64>, mut chan: ProverTcpChannel, mut ctx: ProofCtx) {
+pub fn prove32(c: Circuit<u32>, w: Vec<u32>, mut chan: ProverTcpChannel, mut ctx: ProofCtx) {
     let n_in = w.len();
     let n_mul = c.n_mul;
     let n_select = c.n_select;
     let n_select_const = c.n_select_const;
     let n_decode32 = c.n_decode32;
-    let n_decode64 = c.n_decode64;
     let n_check_all_eq_but_one = c.n_check_all_eq_but_one;
     let check_mul = (n_mul > 0)
         || (n_select > 0)
         || (n_select_const > 0)
         || (n_decode32 > 0)
-        || (n_decode64 > 0)
         || (n_check_all_eq_but_one > 0);
 
     let segments = &vole::Segments {
@@ -26,7 +24,6 @@ pub fn prove64(c: Circuit<u64>, w: Vec<u64>, mut chan: ProverTcpChannel, mut ctx
             + n_select * 2
             + n_select_const
             + n_decode32 * 32
-            + n_decode64 * 64
             + n_check_all_eq_but_one,
         n_mul_check: if check_mul { 1 } else { 0 },
     };
@@ -37,13 +34,13 @@ pub fn prove64(c: Circuit<u64>, w: Vec<u64>, mut chan: ProverTcpChannel, mut ctx
 
     ctx.start_time("sending deltas of witness");
     for (i, (wi, xi)) in w.iter().zip(&voles.xs_in).enumerate() {
-        let delta = wi.wrapping_sub(*xi);
+        let delta = (*wi as u128).wrapping_sub(*xi);
         chan.send_delta(delta);
     }
     ctx.stop_time();
 
     let wires = Wires {
-        cler: w,
+        clear: w.into_iter().map(|w| w as u128).collect::<Vec<_>>(),
         macs: voles.mc_in,
     };
     ctx.start_time("evaluating circuit");
@@ -83,11 +80,11 @@ pub fn prove64(c: Circuit<u64>, w: Vec<u64>, mut chan: ProverTcpChannel, mut ctx
     println!("Done, exiting.");
 }
 
-fn compute_a0a1(x: u64, mult_checks: Vec<A0A1>) -> (u64, u64) {
-    let mut x: u64 = 0;
-    let mut y: u64 = 0;
+fn compute_a0a1(x: u128, mult_checks: Vec<A0A1>) -> (u128, u128) {
+    let mut x: u128 = 0;
+    let mut y: u128 = 0;
     for (t, (a0, a1)) in mult_checks.into_iter().enumerate() {
-        let t = u32::try_from(t).unwrap();
+        let t = u128::try_from(t).unwrap();
         x = x.wrapping_add(a0.wrapping_mul(1)); //x.wrapping_pow(t)));
         y = y.wrapping_add(a1.wrapping_mul(1)); //y.wrapping_pow(t)));
     }
@@ -97,7 +94,7 @@ fn compute_a0a1(x: u64, mult_checks: Vec<A0A1>) -> (u64, u64) {
 fn preprocess_vole(chan: &mut ProverTcpChannel, segs: &vole::Segments) -> vole::CorrSender {
     let n = segs.size().try_into().unwrap();
 
-    println!("Sending extend VOLE n={n}");
+    //println!("Sending extend VOLE n={n}");
     chan.send_extend_vole_zm(n);
 
     let (xs_in, mc_in) = chan.recv_extend_vole_zm(segs.n_in);
@@ -122,31 +119,34 @@ fn preprocess_vole(chan: &mut ProverTcpChannel, segs: &vole::Segments) -> vole::
     }
 }
 
-struct Wires {
-    cler: Vec<u64>,
-    macs: Vec<u64>,
-}
+type ValWithMac = (u128, u128);
+type A0A1 = (u128, u128);
 
-type ValWithMac = (u64, u64);
-type A0A1 = (u64, u64);
-type Mac = u64;
+struct Wires {
+    clear: Vec<u128>,  // values don't get reduced mod 2^32
+    macs: Vec<u128>,
+}
 
 /// Evaluation circuit on clear-text witness as well as macs
 ///
 /// Outputs are pairs of (x, t) where x is the value on the wire and
 /// t is its tag, as well as a0 and a1 for multiplication checks
 fn eval(
-    c: &Circuit<u64>,
+    c: &Circuit<u32>,
     mut wires: Wires,
-    xs_mul: Vec<u64>,
-    mc_mul: Vec<u64>,
+    xs_mul: Vec<u128>,
+    mc_mul: Vec<u128>,
     chan: &mut ProverTcpChannel,
-) -> (Vec<ValWithMac>, Vec<A0A1>, Vec<Mac>) {
+) -> (Vec<ValWithMac>, Vec<A0A1>, Vec<u128>) {
     let gates = &c.gates;
     let consts = &c.consts;
     let n_gates = c.n_gates;
 
-    assert_eq!(c.n_in, wires.cler.len());
+    let zero: u128 = 0;
+    let one: u128 = 1;
+    let two: u128 = 2;
+
+    assert_eq!(c.n_in, wires.clear.len());
     assert_eq!(c.n_in, wires.macs.len());
     //assert_eq!(c.n_mul, xs_mul.len());
     //assert_eq!(c.n_mul, mc_mul.len());
@@ -161,8 +161,8 @@ fn eval(
     for _ in 0..n_gates {
         let op = gates[i];
         i += 1;
-        let mut res_x: u64 = 0;
-        let mut res_t: u64 = 0;
+        let mut res_x: u128 = 0;
+        let mut res_t: u128 = 0;
         match op {
             // --- binary ops
             OP_XOR => {
@@ -202,7 +202,7 @@ fn eval(
                 // args: idx1, idx2, ..., idxn
                 // outw: x1 + x2 + ... xn
                 while gates[i] >= ARG0 {
-                    res_x = res_x.wrapping_add(wires.cler[gates[i] - ARG0]);
+                    res_x = res_x.wrapping_add(wires.clear[gates[i] - ARG0]);
                     res_t = res_t.wrapping_add(wires.macs[gates[i] - ARG0]);
                     i += 1;
                     if i >= gates.len() {
@@ -213,8 +213,8 @@ fn eval(
             OP_SUB => {
                 // args: idx, idy
                 // outw: x - y
-                let lhs = wires.cler[gates[i] - ARG0];
-                let rhs = wires.cler[gates[i + 1] - ARG0];
+                let lhs = wires.clear[gates[i] - ARG0];
+                let rhs = wires.clear[gates[i + 1] - ARG0];
                 //dbg!(lhs, rhs);
                 res_x = lhs.wrapping_sub(rhs);
 
@@ -227,8 +227,8 @@ fn eval(
             OP_MUL => {
                 // args: idx, idy
                 // outw: x * y
-                let lhs = wires.cler[gates[i] - ARG0];
-                let rhs = wires.cler[gates[i + 1] - ARG0];
+                let lhs = wires.clear[gates[i] - ARG0];
+                let rhs = wires.clear[gates[i + 1] - ARG0];
                 //dbg!(lhs, rhs);
                 res_x = lhs.wrapping_mul(rhs);
                 res_t = mc_mul[t];
@@ -252,27 +252,27 @@ fn eval(
                 // args: idc, idx
                 // outw: c * x
                 let c = consts[gates[i] - ARG0];
-                let x = wires.cler[gates[i + 1] - ARG0];
+                let x = wires.clear[gates[i + 1] - ARG0];
                 let t = wires.macs[gates[i + 1] - ARG0];
-                res_x = c.wrapping_mul(x);
-                res_t = c.wrapping_mul(t);
+                res_x = (c as u128).wrapping_mul(x);
+                res_t = (c as u128).wrapping_mul(t);
                 i += 2;
             }
             OP_SELECT => {
                 // args: idi, idx1, idx2, ..., idxn where i <= n
                 // outw: xi
-                let i_ = wires.cler[gates[i] - ARG0];
+                let i_ = wires.clear[gates[i] - ARG0];
                 let it = wires.macs[gates[i] - ARG0];
                 let mut iu: usize = i_.try_into().ok().unwrap();
                 i += 1;
-                res_x = wires.cler[gates[i + iu] - ARG0];
+                res_x = wires.clear[gates[i + iu] - ARG0];
                 res_t = 0;
-                let mut bst: u64 = 0;
+                let mut bst: u128 = 0;
                 let mut j = 0;
                 while gates[i] >= ARG0 {
-                    let xj = wires.cler[gates[i] - ARG0];
+                    let xj = wires.clear[gates[i] - ARG0];
                     let xjt = wires.macs[gates[i] - ARG0];
-                    let bj: u64 = if iu == 0 { 1 } else { 0 };
+                    let bj: u128 = if iu == 0 { 1 } else { 0 };
 
                     // Commit to bj
                     let bjt = mc_mul[t];
@@ -319,18 +319,18 @@ fn eval(
             OP_SELECT_CONST => {
                 // args: idi, idc1, idc2, ..., idcn where i <= n
                 // outw: ci
-                let i_ = wires.cler[gates[i] - ARG0];
+                let i_ = wires.clear[gates[i] - ARG0];
                 let it = wires.macs[gates[i] - ARG0];
                 let mut iu: usize = i_.try_into().ok().unwrap();
                 i += 1;
-                res_x = consts[gates[i + iu] - ARG0];
+                res_x = consts[gates[i + iu] - ARG0] as u128;
                 res_t = 0;
-                let mut bst: u64 = 0;
+                let mut bst: u128 = 0;
                 let mut j = 0;
                 while gates[i] >= ARG0 {
                     let cj = consts[gates[i] - ARG0];
                     let cjt = 0;
-                    let bj: u64 = if iu == 0 { 1 } else { 0 };
+                    let bj: u128 = if iu == 0 { 1 } else { 0 };
 
                     // Commit to bj
                     let bjt = mc_mul[t];
@@ -341,7 +341,7 @@ fn eval(
                     // Add tag to sum of bj tags
                     bst = bst.wrapping_add(bjt);
                     // Compute tag of bj*cj
-                    let bct = cj.wrapping_mul(bjt);
+                    let bct = (cj as u128).wrapping_mul(bjt);
                     // Add tag to result
                     res_t = res_t.wrapping_add(bct);
 
@@ -366,65 +366,28 @@ fn eval(
             OP_DECODE32 => {
                 // args: x where x < 2^32
                 // outw: idx1, idx2, ..., idxn s.t sum 2^{i-1}*xi
-                let mut x = wires.cler[gates[i] - ARG0];
+                let mut x = wires.clear[gates[i] - ARG0];
                 let xt = wires.macs[gates[i] - ARG0];
                 u32::try_from(x).unwrap();
-                let mut sum: u64 = 0;
+                let mut sum: u128 = 0;
                 for i in 0..32 {
-                    let xi = u64::from(x.trailing_ones() > 0);
+                    let xi = u128::from(x.trailing_ones() > 0);
                     // Commit to xi
                     let xit = mc_mul[t];
                     // Send delta
                     let d = xi.wrapping_sub(xs_mul[t]);
                     chan.send_delta(d);
                     // Prove xi(1-xi) opens to 0
-                    let a0 = xit.wrapping_mul(0u64.wrapping_sub(xit));
+                    let a0 = xit.wrapping_mul(zero.wrapping_sub(xit));
                     let a1 = xit
-                        .wrapping_mul(1u64.wrapping_sub(xi))
-                        .wrapping_add(0u64.wrapping_sub(xit).wrapping_mul(xi));
+                        .wrapping_mul(one.wrapping_sub(xi))
+                        .wrapping_add(zero.wrapping_sub(xit).wrapping_mul(xi));
                     a0a1.push((a0, a1));
 
-                    sum = sum.wrapping_add(2u64.pow(i).wrapping_mul(xit));
+                    sum = sum.wrapping_add(two.pow(i).wrapping_mul(xit));
 
                     if i != 31 {
-                        wires.cler.push(xi);
-                        wires.macs.push(xit);
-                        x >>= 1;
-                        t += 1;
-                    } else {
-                        res_x = xi;
-                        res_t = xit;
-                        t += 1;
-                    }
-                }
-                // Prove pow sum opens to x
-                openings.push(sum.wrapping_sub(xt));
-                i += 1;
-            }
-            OP_DECODE64 => {
-                // args: x where x < 2^64
-                // outw: idx1, idx2, ..., idxn s.t sum 2^{i-1}*xi
-                let mut x = wires.cler[gates[i] - ARG0];
-                let xt = wires.macs[gates[i] - ARG0];
-                let mut sum: u64 = 0;
-                for i in 0..64 {
-                    let xi = u64::from(x.trailing_ones() > 0);
-                    // Commit to xi
-                    let xit = mc_mul[t];
-                    // Send delta
-                    let d = xi.wrapping_sub(xs_mul[t]);
-                    chan.send_delta(d);
-                    // Prove xi(1-xi) opens to 0
-                    let a0 = xit.wrapping_mul(0u64.wrapping_sub(xit));
-                    let a1 = xit
-                        .wrapping_mul(1u64.wrapping_sub(xi))
-                        .wrapping_add(0u64.wrapping_sub(xit).wrapping_mul(xi));
-                    a0a1.push((a0, a1));
-
-                    sum = sum.wrapping_add(2u64.pow(i).wrapping_mul(xit));
-
-                    if i != 63 {
-                        wires.cler.push(xi);
+                        wires.clear.push(xi);
                         wires.macs.push(xit);
                         x >>= 1;
                         t += 1;
@@ -446,11 +409,11 @@ fn eval(
                 res_x = 0;
                 res_t = 0;
                 for k in 0..4 {
-                    let x = wires.cler[gates[i] - ARG0];
+                    let x = wires.clear[gates[i] - ARG0];
                     let t = wires.macs[gates[i] - ARG0];
                     assert_eq!(x * (1 - x), 0);
-                    res_x = res_x.wrapping_add(2u64.pow(k).wrapping_mul(x));
-                    res_t = res_t.wrapping_add(2u64.pow(k).wrapping_mul(t));
+                    res_x = res_x.wrapping_add(2u128.pow(k).wrapping_mul(x));
+                    res_t = res_t.wrapping_add(2u128.pow(k).wrapping_mul(t));
                     i += 1;
                 }
             }
@@ -462,11 +425,11 @@ fn eval(
                 res_x = 0;
                 res_t = 0;
                 for k in 0..8 {
-                    let x = wires.cler[gates[i] - ARG0];
+                    let x = wires.clear[gates[i] - ARG0];
                     let t = wires.macs[gates[i] - ARG0];
                     assert_eq!(x * (1 - x), 0);
-                    res_x = res_x.wrapping_add(2u64.pow(k).wrapping_mul(x));
-                    res_t = res_t.wrapping_add(2u64.pow(k).wrapping_mul(t));
+                    res_x = res_x.wrapping_add(2u128.pow(k).wrapping_mul(x));
+                    res_t = res_t.wrapping_add(2u128.pow(k).wrapping_mul(t));
                     i += 1;
                 }
             }
@@ -478,11 +441,11 @@ fn eval(
                 res_x = 0;
                 res_t = 0;
                 for k in 0..32 {
-                    let x = wires.cler[gates[i] - ARG0];
+                    let x = wires.clear[gates[i] - ARG0];
                     let t = wires.macs[gates[i] - ARG0];
                     assert_eq!(x * (1 - x), 0);
-                    res_x = res_x.wrapping_add(2u64.pow(k).wrapping_mul(x));
-                    res_t = res_t.wrapping_add(2u64.pow(k).wrapping_mul(t));
+                    res_x = res_x.wrapping_add(2u128.pow(k).wrapping_mul(x));
+                    res_t = res_t.wrapping_add(2u128.pow(k).wrapping_mul(t));
                     i += 1;
                 }
             }
@@ -508,7 +471,7 @@ fn eval(
             OP_CONST => {
                 // args: idc
                 // outw: c
-                res_x = consts[gates[i] - ARG0];
+                res_x = consts[gates[i] - ARG0] as u128;
                 res_t = 0;
                 i += 1;
             }
@@ -516,7 +479,7 @@ fn eval(
                 // args: idx
                 // outw: none
                 // out: x
-                let x = wires.cler[gates[i] - ARG0];
+                let x = wires.clear[gates[i] - ARG0];
                 let t = wires.macs[gates[i] - ARG0];
                 out.push((x, t));
                 i += 1;
@@ -530,16 +493,16 @@ fn eval(
             OP_CHECK_ALL_EQ_BUT_ONE => {
                 // args: idi, idx1, idy1, idx2, idy2,..., idxn, idyn
                 // asserts: xj = yj for j != i
-                let i_ = wires.cler[gates[i] - ARG0];
+                let i_ = wires.clear[gates[i] - ARG0];
                 let it = wires.macs[gates[i] - ARG0];
                 let mut iu: usize = i_.try_into().ok().unwrap();
                 i += 1;
                 let mut j = 0;
-                let mut sum: u64 = 0;
+                let mut sum: u128 = 0;
                 while gates[i] >= ARG0 {
-                    let bj: u64 = if iu == 0 { 0 } else { 1 };
-                    let xj = wires.cler[gates[i] - ARG0];
-                    let yj = wires.cler[gates[i + 1] - ARG0];
+                    let bj: u128 = if iu == 0 { 0 } else { 1 };
+                    let xj = wires.clear[gates[i] - ARG0];
+                    let yj = wires.clear[gates[i + 1] - ARG0];
                     let xjt = wires.macs[gates[i] - ARG0];
                     let yjt = wires.macs[gates[i + 1] - ARG0];
 
@@ -583,7 +546,7 @@ fn eval(
             _ => panic!("invalid operation"),
         }
         if (op != OP_OUT) & !is_check(op) & !matches!(op, OP_DEBUG) {
-            wires.cler.push(res_x);
+            wires.clear.push(res_x);
             wires.macs.push(res_t);
         }
         // dbg!(&wires);

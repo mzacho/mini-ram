@@ -58,7 +58,7 @@ pub fn route_(p: &Permutation) -> Config {
     let in_edges = (start_in..n).step_by(2).map(|i| (i, i + 1));
 
     // Constraints for output layer
-    let start_out = if even { 2 } else { 1 }; // 2, 4,
+    let start_out = if even { 2 } else { 1 };
     let out_edges = (start_out..n)
         .step_by(2)
         .map(|i| (p.apply_idx(i), p.apply_idx(i + 1)));
