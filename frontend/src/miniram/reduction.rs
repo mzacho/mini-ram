@@ -450,8 +450,12 @@ fn alu(b: &mut Builder<Word>, in_: AluIn, dst_out: usize, one: usize) -> (usize,
     let a32 = in_.arg1; // ret register
     let a36 = in_.arg1_word; // ret constant
 
+    // bitwise and
+    let a0 = gadgets::bitwise_and_u32(b, in_.arg0, in_.arg1);
+
     // todo: select(in_.op / 4, ids) instead
     let mut ids = [ARG0; 37];
+    ids[0] = a0;
     ids[2] = a2;
     ids[3] = a3;
     ids[4] = a4;
@@ -683,6 +687,15 @@ mod test {
     #[test]
     fn ldr_args() {
         let prog = &ldr_2_args();
+        let args = vec![1, 2];
+        let time_bound = 5;
+        let res = convert_and_eval(prog, args, time_bound);
+        assert_eq!(vec![0; res.len()], res);
+    }
+
+    #[test]
+    fn and() {
+        let prog = &and_000111_111000();
         let args = vec![1, 2];
         let time_bound = 5;
         let res = convert_and_eval(prog, args, time_bound);

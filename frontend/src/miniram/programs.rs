@@ -294,6 +294,17 @@ pub fn ldr_2_args() -> Prog {
         .build()
 }
 
+#[cfg(test)]
+pub fn and_000111_111000() -> Prog {
+    Builder::new()
+        .mov_c(1, 0b000111)
+        .mov_c(2, 0b111000)
+        .and(3, 2, 1)
+        .ret_r(3)
+        .build()
+}
+
+
 #[test]
 #[cfg(test)]
 fn test_mul() {

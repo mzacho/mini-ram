@@ -312,7 +312,7 @@ pub fn eval32(c: &Circuit<u32>, mut wires: Vec<u32>) -> Vec<u32> {
         let op = gates[i];
         i += 1;
         let mut res = 0;
-        //dbg!(&op);
+        // dbg!(&op);
         match op {
             // --- binary ops
             OP_XOR => {
@@ -376,7 +376,7 @@ pub fn eval32(c: &Circuit<u32>, mut wires: Vec<u32>) -> Vec<u32> {
             OP_MUL_CONST => {
                 // args: idc, idx
                 // outw: c * x
-                dbg!(i, gates[i] - ARG0);
+                // dbg!(i, gates[i] - ARG0);
                 let c = consts[gates[i] - ARG0];
                 let x = wires[gates[i + 1] - ARG0];
                 res = c.wrapping_mul(x);
@@ -490,6 +490,7 @@ pub fn eval32(c: &Circuit<u32>, mut wires: Vec<u32>) -> Vec<u32> {
                 // args: idx
                 // outw: none
                 // out: x
+                // dbg!(i);
                 out.push(wires[gates[i] - ARG0]);
                 i += 1;
             }
@@ -504,7 +505,7 @@ pub fn eval32(c: &Circuit<u32>, mut wires: Vec<u32>) -> Vec<u32> {
                 // asserts: xj = yj for j != i
                 let mut res_ = true;
                 let mut i_ = wires[gates[i] - ARG0];
-                // dbg!(i_);
+                dbg!(i_);
                 i += 1;
                 while gates[i] > ARG0 {
                     if i_ == 0 {
@@ -514,7 +515,7 @@ pub fn eval32(c: &Circuit<u32>, mut wires: Vec<u32>) -> Vec<u32> {
                     }
                     let x = wires[gates[i] - ARG0];
                     let y = wires[gates[i + 1] - ARG0];
-                    // dbg!(x, y, i, gates[i], gates[i + 1]);
+                    dbg!(x, y, i, gates[i], gates[i + 1]);
                     res_ &= x == y;
                     i += 2;
                     i_ -= 1;

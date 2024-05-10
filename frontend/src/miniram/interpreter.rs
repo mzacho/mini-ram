@@ -117,13 +117,17 @@ pub fn interpret(prog: &Prog, args: Vec<Word>, t: usize) -> Res<(Word, Vec<Local
     let pc = usize::from(PC);
     let mut i = fetch(prog, st[pc])?;
     let res = loop {
-        // dbg!(&st, &cfl, i);
+        dbg!(&st, &cfl, i);
         let ma = match *i {
-            // Inst::AND(dst, x, y) => {
-            //     let v = st[x] ^ st[y];
-            //     cfl.insert(Cond::Z, v == 0);
-            //     st.insert(*dst, v)
-            // }
+            Inst::And(dst, x, y) => {
+                let dst = usize::from(dst);
+                let x = usize::from(x);
+                let y = usize::from(y);
+                let v = st[x] & st[y];
+                st[dst] = v;
+                set_flags(&mut cfl, v);
+                MemAccess::None
+            }
             // Inst::OR(dst, x, y) => {
             //     let v = st[x] | st[y];
             //     cfl.insert(Cond::Z, v == 0);

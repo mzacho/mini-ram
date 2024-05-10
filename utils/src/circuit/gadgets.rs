@@ -14,6 +14,18 @@ pub fn bit_comparator<T>(
     (x_lt_y, eq, x_gt_y)
 }
 
+pub fn bitwise_and_u32(
+    b: &mut Builder<u32>,
+    x: usize, y: usize,
+) -> usize {
+    let xbits = b.decode32(x);
+    let ybits = b.decode32(y);
+    let xs = xbits..xbits + 32;
+    let ys = ybits..ybits + 32;
+    let zs = xs.zip(ys).map(|(x, y)| { b.mul(x, y) }).collect::<Vec<_>>();
+    b.encode32(zs[0])
+}
+
 /// Inputs: x0, .., xn
 ///         y0, .., yn
 ///
@@ -210,7 +222,7 @@ pub fn decode_hi_instr32<T>(
 
 #[cfg(test)]
 mod tests {
-    use crate::circuit::ARG0;
+    use crate::circuit::{eval32, ARG0};
     use permutation::Permutation;
 
     use crate::circuit::{builder, eval64};
@@ -577,5 +589,40 @@ mod tests {
 
         //                 z0    z1    z2     z3    carry
         assert_eq!(res, [1, 1, 0, 1, 1]);
+    }
+
+    #[test]
+    fn test_bitwise_and() {
+        let n_in = 2;
+        let mut b = Builder::new(n_in);
+        let res = bitwise_and_u32(&mut b, ARG0, ARG0 + 1);
+        let c = &b.build(&[res]);
+        let wires = vec![7, 56];
+        let res = eval32(c, wires);
+        assert_eq!(res, [0]);
+
+        let wires = vec![1, 1];
+        let res = eval32(c, wires);
+        assert_eq!(res, [1]);
+
+        let wires = vec![2, 1];
+        let res = eval32(c, wires);
+        assert_eq!(res, [0]);
+
+        let wires = vec![3, 1];
+        let res = eval32(c, wires);
+        assert_eq!(res, [1]);
+
+        let wires = vec![1, 2];
+        let res = eval32(c, wires);
+        assert_eq!(res, [0]);
+
+        let wires = vec![2, 3];
+        let res = eval32(c, wires);
+        assert_eq!(res, [2]);
+
+        let wires = vec![13245, 456789];
+        let res = eval32(c, wires);
+        assert_eq!(res, [12309]);
     }
 }
