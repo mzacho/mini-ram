@@ -79,6 +79,7 @@ fn n_values(op: usize) -> usize {
             | OP_CONV_A2B
             | OP_CONV_B2A
             | OP_ENCODE4
+            | OP_ENCODE5
             | OP_ENCODE8
             | OP_ENCODE32
             | OP_CONST
@@ -174,6 +175,7 @@ fn str_of_op(op: usize) -> &'static str {
         OP_DECODE32 => "OP_DECODE32",
         OP_DECODE64 => "OP_DECODE64",
         OP_ENCODE4 => "OP_ENCODE4",
+        OP_ENCODE5 => "OP_ENCODE5",
         OP_ENCODE8 => "OP_ENCODE8",
         OP_ENCODE32 => "OP_ENCODE32",
         OP_CONST => "OP_CONST",

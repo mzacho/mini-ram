@@ -19,6 +19,7 @@ pub fn verify32(c: Circuit<u32>, mut chan: VerifierTcpChannel, mut ctx: ProofCtx
         || (n_decode32 > 0)
         || (n_check_all_eq_but_one > 0);
 
+    #[rustfmt::skip]
     let segments = &vole::Segments {
         n_in,
         n_mul: n_mul
@@ -243,8 +244,7 @@ fn eval(
                 let mut j: Key = 0;
                 while gates[i] >= ARG0 {
                     let cj = consts[gates[i] - ARG0];
-                    let kcj =
-                    0u128.wrapping_sub(delta.wrapping_mul(cj as Key));
+                    let kcj = 0u128.wrapping_sub(delta.wrapping_mul(cj as Key));
                     let kbj = mul_keys[t];
                     let kcjbj = (cj as Key).wrapping_mul(kbj);
                     let kj = 0u128.wrapping_sub(delta.wrapping_mul(j));
@@ -310,6 +310,19 @@ fn eval(
                     i += 1;
                 }
             }
+            OP_ENCODE5 => {
+                // args: idx1, idx2, idx3, idx4, idx5
+                // outw: sum 2^{i-1}*xi
+                //
+                // assumes xs are all bits so no overflow happens.
+                res = 0;
+                for k in 0..5 {
+                    let key = wires.zm[gates[i] - ARG0];
+                    res = res.wrapping_add(2u128.pow(k).wrapping_mul(key));
+                    i += 1;
+                }
+            }
+
             OP_ENCODE8 => {
                 // args: idx1, idx2, ..., idx8
                 // outw: sum 2^{i-1}*xi

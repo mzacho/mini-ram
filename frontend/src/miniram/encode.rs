@@ -23,6 +23,36 @@ pub fn encode(p: &Prog) -> EProg {
 
 fn encode_instr(i: &Inst) -> EInst64 {
     match i {
+        And(x, y, z) => {
+            let opcode = 0;
+            let dst = encode_reg(x);
+            let arg0 = encode_reg(y);
+            let arg1 = u32::from(encode_reg(z));
+            encode_instr_u64(opcode, dst, arg0, arg1)
+        }
+        Xor(x, y, z) => {
+            let opcode = 0b11100;
+            let dst = encode_reg(x);
+            let arg0 = encode_reg(y);
+            let arg1 = u32::from(encode_reg(z));
+            encode_instr_u64(opcode, dst, arg0, arg1)
+        }
+        Shr(x, y, z) => {
+            let opcode = 0b1000000;
+            let dst = encode_reg(x);
+            let arg0 = encode_reg(z);
+            let field4 = u8::try_from(*y).unwrap();
+            let arg1 = 0;
+            encode_extended_instr_u64(opcode, dst, arg0, field4, arg1)
+        }
+        Rotr(x, y, z) => {
+            let opcode = 0b1000100;
+            let dst = encode_reg(x);
+            let arg0 = encode_reg(z);
+            let field4 = u8::try_from(*y).unwrap();
+            let arg1 = 0;
+            encode_extended_instr_u64(opcode, dst, arg0, field4, arg1)
+        }
         Add(x, y, z) => {
             let opcode = 0b100;
             let dst = encode_reg(x);
@@ -32,20 +62,6 @@ fn encode_instr(i: &Inst) -> EInst64 {
         }
         Sub(x, y, z) => {
             let opcode = 0b1000;
-            let dst = encode_reg(x);
-            let arg0 = encode_reg(y);
-            let arg1 = u32::from(encode_reg(z));
-            encode_instr_u64(opcode, dst, arg0, arg1)
-        }
-        And(x,y,z) => {
-            let opcode = 0;
-            let dst = encode_reg(x);
-            let arg0 = encode_reg(y);
-            let arg1 = u32::from(encode_reg(z));
-            encode_instr_u64(opcode, dst, arg0, arg1)
-        }
-        Xor(x,y,z) => {
-            let opcode = 0b11100;
             let dst = encode_reg(x);
             let arg0 = encode_reg(y);
             let arg1 = u32::from(encode_reg(z));
@@ -100,12 +116,16 @@ fn encode_instr(i: &Inst) -> EInst64 {
 }
 
 fn encode_instr_u64(opcode: u8, dst: u8, arg0: u8, arg1: u32) -> u64 {
+    encode_extended_instr_u64(opcode, dst, arg0, 0, arg1)
+}
+
+fn encode_extended_instr_u64(opcode: u8, dst: u8, arg0: u8, field4: u8, arg1: u32) -> u64 {
     let field1: u64 = u64::from(opcode) << 56;
     let field2: u64 = u64::from(dst) << 48;
     let field3: u64 = u64::from(arg0) << 40;
-    // field 4 is blank
+    let field4: u64 = u64::from(field4) << 32;
     let field5: u64 = u64::from(arg1);
-    field1 ^ field2 ^ field3 ^ field5
+    field1 ^ field2 ^ field3 ^ field4 ^ field5
 }
 
 #[inline]

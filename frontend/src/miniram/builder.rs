@@ -24,6 +24,14 @@ impl Builder {
         self.p.push(Inst::Xor(z, x, y));
         self
     }
+    pub fn shr(mut self, dst: Reg, i: Word, x: Reg) -> Self {
+        self.p.push(Inst::Shr(dst, i, x));
+        self
+    }
+    pub fn rotr(mut self, dst: Reg, i: Word, x: Reg) -> Self {
+        self.p.push(Inst::Rotr(dst, i, x));
+        self
+    }
     pub fn sub(mut self, z: Reg, x: Reg, y: Reg) -> Self {
         self.p.push(Inst::Sub(z, x, y));
         self

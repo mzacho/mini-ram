@@ -7,7 +7,7 @@ use utils::{permutation, waksman};
 
 use utils::circuit::{
     builder::{self, Builder},
-    gadgets, ARG0, ARG1
+    gadgets, ARG0, ARG1,
 };
 
 use super::encode::encode;
@@ -151,8 +151,7 @@ pub fn generate_circuit(prog: &Prog, time_bound: usize) -> builder::Res<Word> {
     perm_in_3.push(is_load);
 
     for step in 1..time_bound {
-        let (mut o, adr, v, is_load) = trans_circ(&mut b, step - 1,
-        n_instr, one, id_two);
+        let (mut o, adr, v, is_load) = trans_circ(&mut b, step - 1, n_instr, zero, one, id_two);
         ctr = b.add(&[ctr, one]);
         outputs.append(&mut o);
         perm_in_0.push(ctr);
@@ -252,7 +251,7 @@ fn fst_trans_circ(
     let instr_lo = b.const_(ARG1);
 
     // Decode it
-    let (op, dst, _, is_mem, is_load, is_ret) = gadgets::decode_hi_instr32(b, instr_hi);
+    let (op, dst, _, is_mem, is_load, is_ret, field4) = gadgets::decode_hi_instr32(b, instr_hi);
     let (_, arg1_word) = gadgets::decode_lo_instr32(b, instr_lo);
 
     let is_str = b.xor_bits(&[is_mem, is_load]);
@@ -275,8 +274,9 @@ fn fst_trans_circ(
         arg1_word,
         cfl_z: zero,
         pc: zero,
+        field4,
     };
-    let (res, z) = alu(b, alu_in, dst_out, one);
+    let (res, z) = alu(b, alu_in, dst_out, zero, one);
 
     // Output res-dst_out and z-cfl_out (both should be zero)
     let check_alu = b.sub(res, dst_out);
@@ -326,8 +326,9 @@ fn trans_circ(
     b: &mut builder::Builder<Word>,
     i: usize,
     l: usize,
+    zero: usize,
     one: usize,
-    id_two: usize
+    id_two: usize,
 ) -> (Vec<usize>, usize, usize, usize) {
     let k0 = i * SIZE_LOCAL_ST + ARG0;
     let k1 = (i + 1) * SIZE_LOCAL_ST + ARG0;
@@ -337,11 +338,11 @@ fn trans_circ(
     let pc = k0 + usize::from(PC);
     let pc_hi = b.mul_const(id_two, pc);
     let pc_lo = b.add(&[one, pc_hi]);
-    let instr_hi = b.select_const_range(pc_hi, ARG0, ARG0 + 2*l, 1);
-    let instr_lo = b.select_const_range(pc_lo, ARG0, ARG0 + 2*l+1, 1);
+    let instr_hi = b.select_const_range(pc_hi, ARG0, ARG0 + 2 * l, 1);
+    let instr_lo = b.select_const_range(pc_lo, ARG0, ARG0 + 2 * l + 1, 1);
 
     // Decode instruction
-    let (op, dst, arg0, is_mem, is_load, is_ret) = gadgets::decode_hi_instr32(b, instr_hi);
+    let (op, dst, arg0, is_mem, is_load, is_ret, field4) = gadgets::decode_hi_instr32(b, instr_hi);
     let (arg1, arg1_word) = gadgets::decode_lo_instr32(b, instr_lo);
 
     let is_str = b.xor_bits(&[is_mem, is_load]);
@@ -363,8 +364,9 @@ fn trans_circ(
         arg1_word,
         cfl_z,
         pc,
+        field4,
     };
-    let (res, z) = alu(b, alu_in, dst_out, one);
+    let (res, z) = alu(b, alu_in, dst_out, zero, one);
 
     // Ouput res-dst_out and z-cfl_out - both should be zero if the
     // witness satisfies the circuit.
@@ -396,8 +398,7 @@ fn trans_circ(
     // Compute the the value read/ written for LDR/STR instructions.
     // The value is only used if is_load is set, so garbage is sent
     // for instructions that don't access memory.
-    let tmp1 = b.mul
-        (is_load, dst_out);
+    let tmp1 = b.mul(is_load, dst_out);
     let tmp2 = b.sub(one, is_load);
     let tmp3 = b.mul(tmp2, dst_in);
     let mem_val = b.add(&[tmp1, tmp3]);
@@ -412,6 +413,7 @@ struct AluIn {
     arg1_word: usize,
     cfl_z: usize,
     pc: usize,
+    field4: usize,
 }
 
 /// Input:
@@ -429,7 +431,13 @@ struct AluIn {
 ///   memory operation (which are checked by a seperate memory
 ///   consistency circuit)
 ///   - z: is the boolean value of the Z flag.
-fn alu(b: &mut Builder<Word>, in_: AluIn, dst_out: usize, one: usize) -> (usize, usize) {
+fn alu(
+    b: &mut Builder<Word>,
+    in_: AluIn,
+    dst_out: usize,
+    zero: usize,
+    one: usize,
+) -> (usize, usize) {
     // Compute each possible operation of the architecture in order
     // of the encoding of opcodes. Then select the correct value
     // using the opcode.
@@ -452,12 +460,34 @@ fn alu(b: &mut Builder<Word>, in_: AluIn, dst_out: usize, one: usize) -> (usize,
 
     let arg0bits = b.decode32(in_.arg0);
     let arg1bits = b.decode32(in_.arg1);
-    // bitwise operations
+    // --- bitwise operations
+    // and/ xor
     let a0 = gadgets::bitwise_and_u32_bits(b, arg0bits, arg1bits);
     let a28 = gadgets::bitwise_xor_u32_bits(b, arg0bits, arg1bits);
+    // shr
+    let shrs = (1..32).map(|i| {
+        // encode the bits 0 0 0 ... x0 x1 ... x(32-i)
+        let mut xs = (arg0bits + i..arg0bits + 32).chain((0..i).map(|_| zero));
+        b.encode32_range(core::array::from_fn(|_| xs.next().unwrap()))
+    });
+    // shr 0 arg0, shr 1 arg0, ..., shr 31 arg0
+    let shrs = &[in_.arg0].into_iter().chain(shrs).collect::<Vec<_>>();
+    // shr field4 arg0
+    let a64 = b.select(in_.field4, shrs);
+
+    // rotr
+    let rotrs = (1..32).map(|i| {
+        // encode the bits x(32-i+1) x(32-i+2) ... x0 x1 ... x(32-i)
+        let mut xs = (arg0bits + i..arg0bits + 32).chain(arg0bits..arg0bits + i);
+        b.encode32_range(core::array::from_fn(|_| xs.next().unwrap()))
+    });
+    // rotr 0 arg0, rotr 1 arg0, ..., rotr 31 arg0
+    let rotrs = &[in_.arg0].into_iter().chain(rotrs).collect::<Vec<_>>();
+    // rotr field4 arg0
+    let a68 = b.select(in_.field4, rotrs);
 
     // todo: select(in_.op / 4, ids) instead
-    let mut ids = [ARG0; 37];
+    let mut ids = [ARG0; 69];
     ids[0] = a0;
     ids[2] = a2;
     ids[3] = a3;
@@ -470,6 +500,8 @@ fn alu(b: &mut Builder<Word>, in_: AluIn, dst_out: usize, one: usize) -> (usize,
     ids[28] = a28;
     ids[32] = a32;
     ids[36] = a36;
+    ids[64] = a64;
+    ids[68] = a68;
 
     let res = b.select(in_.op, &ids);
 
@@ -711,6 +743,24 @@ mod test {
         let prog = &xor_0110_0101();
         let args = vec![];
         let time_bound = 6;
+        let res = convert_and_eval(prog, args, time_bound);
+        assert_eq!(vec![0; res.len()], res);
+    }
+
+    #[test]
+    fn shr() {
+        let prog = &shr_5_1654560();
+        let args = vec![];
+        let time_bound = 5;
+        let res = convert_and_eval(prog, args, time_bound);
+        assert_eq!(vec![0; res.len()], res);
+    }
+
+    #[test]
+    fn rotr() {
+        let prog = &rotr_8_0xb301();
+        let args = vec![];
+        let time_bound = 5;
         let res = convert_and_eval(prog, args, time_bound);
         assert_eq!(vec![0; res.len()], res);
     }

@@ -33,7 +33,12 @@ pub fn run_p(
     Ok(())
 }
 
-pub fn run_v(port: u16, port_vole: u16, c: Circuit<Word>, mut ctx: ProofCtx) -> std::io::Result<()> {
+pub fn run_v(
+    port: u16,
+    port_vole: u16,
+    c: Circuit<Word>,
+    mut ctx: ProofCtx,
+) -> std::io::Result<()> {
     print!("Verifier: Connecting to VOLE dealer on port {port_vole}... ");
     let stream_vole = TcpStream::connect(format!("127.0.0.1:{port_vole}"))?;
     println!("Connected.");
@@ -84,7 +89,7 @@ pub fn run_vole(port: u16, mut ctx: ProofCtx) -> std::io::Result<()> {
         let mut m: [u128; 32] = [0; 32];
         for j in 0..32 {
             m[j] = (delta.wrapping_mul(r[j])).wrapping_add(k[j]);
-        };
+        }
         //println!("  i={i}: Sending r={r:?}, m={m:?} to prover");
         snd_extend_mac(&mut stream_p, &r, &m)?;
         //println!("       Sending k={k:?} to verifier");

@@ -38,6 +38,8 @@ pub enum Inst {
     // Bitwise operations
     And(Reg, Reg, Reg),
     Xor(Reg, Reg, Reg),
+    Shr(Reg, Word, Reg),  // todo: Change Word to 5 bit type
+    Rotr(Reg, Word, Reg), // todo: Change Word to 5 bit type
     // Integer operations
     Add(Reg, Reg, Reg),
     Sub(Reg, Reg, Reg),

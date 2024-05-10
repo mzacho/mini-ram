@@ -12,6 +12,7 @@ use super::OP_CONV_B2A;
 use super::OP_DECODE32;
 use super::OP_ENCODE32;
 use super::OP_ENCODE4;
+use super::OP_ENCODE5;
 use super::OP_ENCODE8;
 use super::OP_MUL;
 use super::OP_MUL_CONST;
@@ -286,6 +287,18 @@ impl<T> Builder<T> {
         self.validate();
         self.gates.push(OP_ENCODE4);
         for id in x0..x0 + 4 {
+            self.gates.push(id);
+        }
+        self.n_gates += 1;
+        self.cursor_wires += 1;
+        self.cursor_wires - 1
+    }
+
+    pub fn encode5(&mut self, x0: usize) -> usize {
+        #[cfg(test)]
+        self.validate();
+        self.gates.push(OP_ENCODE5);
+        for id in x0..x0 + 5 {
             self.gates.push(id);
         }
         self.n_gates += 1;

@@ -316,6 +316,28 @@ pub fn xor_0110_0101() -> Prog {
         .build()
 }
 
+#[cfg(test)]
+pub fn shr_5_1654560() -> Prog {
+    Builder::new()
+        .mov_c(1, 1654560)
+        .mov_c(2, 1654560 >> 5)
+        .shr(1, 5, 1)
+        .sub(3, 2, 1)
+        .ret_r(3)
+        .build()
+}
+
+#[cfg(test)]
+pub fn rotr_8_0xb301() -> Prog {
+    assert_eq!(0xb301u32.rotate_right(8), 0x10000b3);
+    Builder::new()
+        .mov_c(1, 0xb301u32)
+        .mov_c(2, 0x10000b3)
+        .rotr(1, 8, 1)
+        .sub(3, 2, 1)
+        .ret_r(3)
+        .build()
+}
 
 #[test]
 #[cfg(test)]

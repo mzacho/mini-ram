@@ -1,9 +1,9 @@
 #![allow(unused_variables)]
 extern crate utils;
 
+use zerocopy::transmute;
 use zerocopy::FromBytes;
 use zerocopy::IntoBytes;
-use zerocopy::transmute;
 
 use std::time::Instant;
 
@@ -55,8 +55,10 @@ impl ProofCtx {
         transmute!([hi, lo])
     }
 
-    pub fn fill_bytes<T>(&mut self, buf: &mut [T]) where T:
-        IntoBytes + FromBytes + zerocopy::NoCell {
+    pub fn fill_bytes<T>(&mut self, buf: &mut [T])
+    where
+        T: IntoBytes + FromBytes + zerocopy::NoCell,
+    {
         self.rng.fill_bytes(buf.as_mut_bytes())
     }
 

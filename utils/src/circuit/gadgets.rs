@@ -14,35 +14,29 @@ pub fn bit_comparator<T>(
     (x_lt_y, eq, x_gt_y)
 }
 
-pub fn bitwise_and_u32(
-    b: &mut Builder<u32>,
-    x: usize, y: usize,
-) -> usize {
+pub fn bitwise_and_u32(b: &mut Builder<u32>, x: usize, y: usize) -> usize {
     let xbits = b.decode32(x);
     let ybits = b.decode32(y);
     let xs = xbits..xbits + 32;
     let ys = ybits..ybits + 32;
-    let zs = xs.zip(ys).map(|(x, y)| { b.mul(x, y) }).collect::<Vec<_>>();
+    let zs = xs.zip(ys).map(|(x, y)| b.mul(x, y)).collect::<Vec<_>>();
     b.encode32(zs[0])
 }
 
-pub fn bitwise_and_u32_bits(
-    b: &mut Builder<u32>,
-    xbits: usize, ybits: usize,
-) -> usize {
+pub fn bitwise_and_u32_bits(b: &mut Builder<u32>, xbits: usize, ybits: usize) -> usize {
     let xs = xbits..xbits + 32;
     let ys = ybits..ybits + 32;
-    let zs = xs.zip(ys).map(|(x, y)| { b.mul(x, y) }).collect::<Vec<_>>();
+    let zs = xs.zip(ys).map(|(x, y)| b.mul(x, y)).collect::<Vec<_>>();
     b.encode32(zs[0])
 }
 
-pub fn bitwise_xor_u32_bits(
-    b: &mut Builder<u32>,
-    xbits: usize, ybits: usize,
-) -> usize {
+pub fn bitwise_xor_u32_bits(b: &mut Builder<u32>, xbits: usize, ybits: usize) -> usize {
     let xs = xbits..xbits + 32;
     let ys = ybits..ybits + 32;
-    let zs = xs.zip(ys).map(|(x, y)| { b.xor_bits(&[x, y])  }).collect::<Vec<_>>();
+    let zs = xs
+        .zip(ys)
+        .map(|(x, y)| b.xor_bits(&[x, y]))
+        .collect::<Vec<_>>();
     b.encode32_range(core::array::from_fn(|i| zs[i]))
 }
 
@@ -203,10 +197,7 @@ fn switch<T>(b: &mut Builder<T>, x: usize, y: usize, z: usize, one: usize) -> (u
 ///
 /// Input: i, the (index of the) constant holding the lower 32 bit
 /// of the instruction.
-pub fn decode_lo_instr32<T>(
-    b: &mut Builder<T>,
-    i: usize,
-) -> (usize, usize) {
+pub fn decode_lo_instr32<T>(b: &mut Builder<T>, i: usize) -> (usize, usize) {
     let i0 = b.decode32(i);
     let arg1 = b.encode4(i0);
     let arg1_word = i;
@@ -221,7 +212,7 @@ pub fn decode_lo_instr32<T>(
 pub fn decode_hi_instr32<T>(
     b: &mut Builder<T>,
     i: usize,
-) -> (usize, usize, usize, usize, usize, usize) {
+) -> (usize, usize, usize, usize, usize, usize, usize) {
     // b.dbg()
     // Destruct instruction into its bit-decomposition
     let i0 = b.decode32(i);
@@ -236,9 +227,9 @@ pub fn decode_hi_instr32<T>(
 
     let dst = b.encode4(i0 + 16);
     let arg0 = b.encode4(i0 + 8);
-    (op, dst, arg0, is_mem, is_load, is_ret)
+    let field4 = b.encode5(i0);
+    (op, dst, arg0, is_mem, is_load, is_ret, field4)
 }
-
 
 #[cfg(test)]
 mod tests {

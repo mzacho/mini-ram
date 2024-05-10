@@ -21,6 +21,7 @@ pub const OP_CONV_A2B: usize = 9;
 pub const OP_DECODE32: usize = 22;
 pub const OP_DECODE64: usize = 16;
 pub const OP_ENCODE4: usize = 21;
+pub const OP_ENCODE5: usize = 23;
 pub const OP_ENCODE8: usize = 17;
 pub const OP_ENCODE32: usize = 18;
 pub const OP_CONST: usize = 10;
@@ -34,11 +35,11 @@ pub const OP_CHECK_ALL_EQ_BUT_ONE: usize = 15;
 pub const OP_DEBUG: usize = 20;
 
 /// Index of the first two arguments
-pub const ARG0: usize = 23;
+pub const ARG0: usize = 24;
 pub const ARG1: usize = ARG0 + 1;
 
-use std::u64::MAX;
 use std::u32::MAX as U32MAX;
+use std::u64::MAX;
 
 pub use builder::Res as Circuit;
 
@@ -389,9 +390,10 @@ pub fn eval32(c: &Circuit<u32>, mut wires: Vec<u32>) -> Vec<u32> {
                 // outw: xi
                 let i_ = wires[gates[i] - ARG0];
                 let i_: usize = i_.try_into().ok().unwrap();
-                //dbg!(i_);
+                dbg!(i_);
                 i += i_ + 1;
                 res = wires[gates[i] - ARG0];
+                dbg!(res);
                 while gates[i] >= ARG0 {
                     i += 1;
                     if i >= gates.len() {
@@ -436,6 +438,18 @@ pub fn eval32(c: &Circuit<u32>, mut wires: Vec<u32>) -> Vec<u32> {
                 // assumse xs are all bits so no overflow happens.
                 // TODO: Assert that xs are bits
                 for k in 0..4 {
+                    let xk = wires[gates[i] - ARG0];
+                    res += 2u32.pow(k) * xk;
+                    i += 1;
+                }
+            }
+            OP_ENCODE5 => {
+                // args: idx1, idx2, idx3, idx4, idx5
+                // outw: sum 2^{i-1}*xi
+                //
+                // assumse xs are all bits so no overflow happens.
+                // TODO: Assert that xs are bits
+                for k in 0..5 {
                     let xk = wires[gates[i] - ARG0];
                     res += 2u32.pow(k) * xk;
                     i += 1;
@@ -541,7 +555,6 @@ pub fn eval32(c: &Circuit<u32>, mut wires: Vec<u32>) -> Vec<u32> {
     pp::print(c, Some(&wires));
     out
 }
-
 
 /// Counts number of gates
 fn count_ops(gates: &[usize]) -> usize {

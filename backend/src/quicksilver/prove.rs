@@ -18,6 +18,7 @@ pub fn prove32(c: Circuit<u32>, w: Vec<u32>, mut chan: ProverTcpChannel, mut ctx
         || (n_decode32 > 0)
         || (n_check_all_eq_but_one > 0);
 
+    #[rustfmt::skip]
     let segments = &vole::Segments {
         n_in,
         n_mul: n_mul
@@ -123,7 +124,7 @@ type ValWithMac = (u128, u128);
 type A0A1 = (u128, u128);
 
 struct Wires {
-    clear: Vec<u128>,  // values don't get reduced mod 2^32
+    clear: Vec<u128>, // values don't get reduced mod 2^32
     macs: Vec<u128>,
 }
 
@@ -409,6 +410,22 @@ fn eval(
                 res_x = 0;
                 res_t = 0;
                 for k in 0..4 {
+                    let x = wires.clear[gates[i] - ARG0];
+                    let t = wires.macs[gates[i] - ARG0];
+                    assert_eq!(x * (1 - x), 0);
+                    res_x = res_x.wrapping_add(2u128.pow(k).wrapping_mul(x));
+                    res_t = res_t.wrapping_add(2u128.pow(k).wrapping_mul(t));
+                    i += 1;
+                }
+            }
+            OP_ENCODE5 => {
+                // args: idx1, idx2, idx3, idx4, idx5
+                // outw: sum 2^{i-1}*xi
+                //
+                // assumes xs are all bits so no overflow happens.
+                res_x = 0;
+                res_t = 0;
+                for k in 0..5 {
                     let x = wires.clear[gates[i] - ARG0];
                     let t = wires.macs[gates[i] - ARG0];
                     assert_eq!(x * (1 - x), 0);

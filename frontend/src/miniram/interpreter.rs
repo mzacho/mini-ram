@@ -137,6 +137,22 @@ pub fn interpret(prog: &Prog, args: Vec<Word>, t: usize) -> Res<(Word, Vec<Local
                 set_flags(&mut cfl, v);
                 MemAccess::None
             }
+            Inst::Shr(dst, x, y) => {
+                let dst = usize::from(dst);
+                let y = usize::from(y);
+                let v = st[y] >> x;
+                st[dst] = v;
+                set_flags(&mut cfl, v);
+                MemAccess::None
+            }
+            Inst::Rotr(dst, x, y) => {
+                let dst = usize::from(dst);
+                let y = usize::from(y);
+                let v = st[y].rotate_right(x);
+                st[dst] = v;
+                set_flags(&mut cfl, v);
+                MemAccess::None
+            }
             Inst::Add(dst, x, y) => {
                 let dst = usize::from(dst);
                 let x = usize::from(x);
@@ -150,7 +166,7 @@ pub fn interpret(prog: &Prog, args: Vec<Word>, t: usize) -> Res<(Word, Vec<Local
                 let dst = usize::from(dst);
                 let x = usize::from(x);
                 let y = usize::from(y);
-                let v = st[x] - st[y];
+                let v = st[x].wrapping_sub(st[y]);
                 set_flags(&mut cfl, v);
                 st[dst] = v;
                 MemAccess::None
