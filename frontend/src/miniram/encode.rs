@@ -44,6 +44,13 @@ fn encode_instr(i: &Inst) -> EInst64 {
             let arg1 = u32::from(encode_reg(z));
             encode_instr_u64(opcode, dst, arg0, arg1)
         }
+        Xor(x,y,z) => {
+            let opcode = 0b11100;
+            let dst = encode_reg(x);
+            let arg0 = encode_reg(y);
+            let arg1 = u32::from(encode_reg(z));
+            encode_instr_u64(opcode, dst, arg0, arg1)
+        }
         Mov(x, y) => {
             let opcode = 0b1100;
             let dst = encode_reg(x);

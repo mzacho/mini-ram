@@ -37,7 +37,7 @@ pub mod reg {
 pub enum Inst {
     // Bitwise operations
     And(Reg, Reg, Reg),
-    // OR(Reg, Reg, Reg),
+    Xor(Reg, Reg, Reg),
     // Integer operations
     Add(Reg, Reg, Reg),
     Sub(Reg, Reg, Reg),

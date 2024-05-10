@@ -128,11 +128,15 @@ pub fn interpret(prog: &Prog, args: Vec<Word>, t: usize) -> Res<(Word, Vec<Local
                 set_flags(&mut cfl, v);
                 MemAccess::None
             }
-            // Inst::OR(dst, x, y) => {
-            //     let v = st[x] | st[y];
-            //     cfl.insert(Cond::Z, v == 0);
-            //     st.insert(*dst, v)
-            // }
+            Inst::Xor(dst, x, y) => {
+                let dst = usize::from(dst);
+                let x = usize::from(x);
+                let y = usize::from(y);
+                let v = st[x] ^ st[y];
+                st[dst] = v;
+                set_flags(&mut cfl, v);
+                MemAccess::None
+            }
             Inst::Add(dst, x, y) => {
                 let dst = usize::from(dst);
                 let x = usize::from(x);

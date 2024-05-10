@@ -294,10 +294,14 @@ impl<T> Builder<T> {
     }
 
     pub fn encode32(&mut self, x0: usize) -> usize {
+        self.encode32_range(core::array::from_fn(|i| i + x0))
+    }
+
+    pub fn encode32_range(&mut self, xs: [usize; 32]) -> usize {
         #[cfg(test)]
         self.validate();
         self.gates.push(OP_ENCODE32);
-        for id in x0..x0 + 32 {
+        for id in xs {
             self.gates.push(id);
         }
         self.n_gates += 1;

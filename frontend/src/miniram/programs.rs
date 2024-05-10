@@ -304,6 +304,18 @@ pub fn and_000111_111000() -> Prog {
         .build()
 }
 
+#[cfg(test)]
+pub fn xor_0110_0101() -> Prog {
+    Builder::new()
+        .mov_c(1, 0b0110)
+        .mov_c(2, 0b0101)
+        .xor(3, 2, 1)
+        .mov_c(4, 0b0110 ^ 0b0101)
+        .sub(3, 3, 4)
+        .ret_r(3)
+        .build()
+}
+
 
 #[test]
 #[cfg(test)]

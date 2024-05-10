@@ -220,6 +220,7 @@ pub fn eval64(c: &Circuit<u64>, mut wires: Vec<u64>) -> Vec<u64> {
                 // TODO: Assert that xs are bits
                 for k in 0..32 {
                     let xk = wires[gates[i] - ARG0];
+                    //dbg!(xk);
                     res += 2u64.pow(k) * xk;
                     i += 1;
                 }
@@ -312,7 +313,7 @@ pub fn eval32(c: &Circuit<u32>, mut wires: Vec<u32>) -> Vec<u32> {
         let op = gates[i];
         i += 1;
         let mut res = 0;
-        // dbg!(&op);
+        //dbg!(&op);
         match op {
             // --- binary ops
             OP_XOR => {
@@ -348,6 +349,7 @@ pub fn eval32(c: &Circuit<u32>, mut wires: Vec<u32>) -> Vec<u32> {
                 // args: idx1, idx2, ..., idxn
                 // outw: x1 + x2 + ... xn
                 while gates[i] >= ARG0 {
+                    //dbg!(i, gates[i] - ARG0, wires[gates[i] - ARG0]);
                     res = res.wrapping_add(wires[gates[i] - ARG0]);
                     i += 1;
                     if i >= gates.len() {
@@ -360,7 +362,7 @@ pub fn eval32(c: &Circuit<u32>, mut wires: Vec<u32>) -> Vec<u32> {
                 // outw: x - y
                 let lhs = wires[gates[i] - ARG0];
                 let rhs = wires[gates[i + 1] - ARG0];
-                //dbg!(lhs, rhs);
+                //dbg!(i, gates[i] - ARG0, gates[i + 1] - ARG0, lhs, rhs);
                 res = lhs.wrapping_sub(rhs);
                 i += 2;
             }
@@ -369,7 +371,7 @@ pub fn eval32(c: &Circuit<u32>, mut wires: Vec<u32>) -> Vec<u32> {
                 // outw: x * y
                 let lhs = wires[gates[i] - ARG0];
                 let rhs = wires[gates[i + 1] - ARG0];
-                //dbg!(lhs, rhs);
+                //dbg!(i, gates[i] - ARG0, gates[i + 1] - ARG0, lhs, rhs);
                 res = lhs.wrapping_mul(rhs);
                 i += 2;
             }
@@ -415,7 +417,7 @@ pub fn eval32(c: &Circuit<u32>, mut wires: Vec<u32>) -> Vec<u32> {
                 // args: x where x < 2^32
                 // outw: idx1, idx2, ..., idxn s.t sum 2^{i-1}*xi
                 let mut x = wires[gates[i] - ARG0];
-                //dbg!(x);
+                // dbg!(x);
                 for _ in 1..32 {
                     res = u32::from(x.trailing_ones() > 0);
                     wires.push(res);
@@ -459,6 +461,8 @@ pub fn eval32(c: &Circuit<u32>, mut wires: Vec<u32>) -> Vec<u32> {
                 // TODO: Assert that xs are bits
                 for k in 0..32 {
                     let xk = wires[gates[i] - ARG0];
+                    //dbg!(gates[i] - ARG0);
+                    //dbg!(xk);
                     res += 2u32.pow(k) * xk;
                     i += 1;
                 }
@@ -490,7 +494,7 @@ pub fn eval32(c: &Circuit<u32>, mut wires: Vec<u32>) -> Vec<u32> {
                 // args: idx
                 // outw: none
                 // out: x
-                // dbg!(i);
+                // dbg!(wires[gates[i] - ARG0]);
                 out.push(wires[gates[i] - ARG0]);
                 i += 1;
             }
@@ -505,7 +509,7 @@ pub fn eval32(c: &Circuit<u32>, mut wires: Vec<u32>) -> Vec<u32> {
                 // asserts: xj = yj for j != i
                 let mut res_ = true;
                 let mut i_ = wires[gates[i] - ARG0];
-                dbg!(i_);
+                // dbg!(i_);
                 i += 1;
                 while gates[i] > ARG0 {
                     if i_ == 0 {
@@ -515,7 +519,7 @@ pub fn eval32(c: &Circuit<u32>, mut wires: Vec<u32>) -> Vec<u32> {
                     }
                     let x = wires[gates[i] - ARG0];
                     let y = wires[gates[i + 1] - ARG0];
-                    dbg!(x, y, i, gates[i], gates[i + 1]);
+                    // dbg!(x, y, i, gates[i], gates[i + 1]);
                     res_ &= x == y;
                     i += 2;
                     i_ -= 1;
@@ -529,7 +533,7 @@ pub fn eval32(c: &Circuit<u32>, mut wires: Vec<u32>) -> Vec<u32> {
             _ => panic!("invalid operation"),
         }
         if (op != OP_OUT) & !is_check(op) & !matches!(op, OP_DEBUG) {
-            // dbg!(res);
+            //dbg!(res);
             wires.push(res);
         }
         // dbg!(&wires);

@@ -26,6 +26,26 @@ pub fn bitwise_and_u32(
     b.encode32(zs[0])
 }
 
+pub fn bitwise_and_u32_bits(
+    b: &mut Builder<u32>,
+    xbits: usize, ybits: usize,
+) -> usize {
+    let xs = xbits..xbits + 32;
+    let ys = ybits..ybits + 32;
+    let zs = xs.zip(ys).map(|(x, y)| { b.mul(x, y) }).collect::<Vec<_>>();
+    b.encode32(zs[0])
+}
+
+pub fn bitwise_xor_u32_bits(
+    b: &mut Builder<u32>,
+    xbits: usize, ybits: usize,
+) -> usize {
+    let xs = xbits..xbits + 32;
+    let ys = ybits..ybits + 32;
+    let zs = xs.zip(ys).map(|(x, y)| { b.xor_bits(&[x, y])  }).collect::<Vec<_>>();
+    b.encode32_range(core::array::from_fn(|i| zs[i]))
+}
+
 /// Inputs: x0, .., xn
 ///         y0, .., yn
 ///
@@ -624,5 +644,17 @@ mod tests {
         let wires = vec![13245, 456789];
         let res = eval32(c, wires);
         assert_eq!(res, [12309]);
+    }
+    #[test]
+    fn test_bitwise_xor() {
+        let n_in = 2;
+        let mut b = Builder::new(n_in);
+        let xbits = b.decode32(ARG0);
+        let ybits = b.decode32(ARG0 + 1);
+        let res = bitwise_xor_u32_bits(&mut b, xbits, ybits);
+        let c = &b.build(&[res]);
+        let wires = vec![6, 5];
+        let res = eval32(c, wires);
+        assert_eq!(res, [3]);
     }
 }

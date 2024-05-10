@@ -20,6 +20,10 @@ impl Builder {
         self.p.push(Inst::And(z, x, y));
         self
     }
+    pub fn xor(mut self, z: Reg, x: Reg, y: Reg) -> Self {
+        self.p.push(Inst::Xor(z, x, y));
+        self
+    }
     pub fn sub(mut self, z: Reg, x: Reg, y: Reg) -> Self {
         self.p.push(Inst::Sub(z, x, y));
         self

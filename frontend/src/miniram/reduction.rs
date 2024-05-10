@@ -450,8 +450,11 @@ fn alu(b: &mut Builder<Word>, in_: AluIn, dst_out: usize, one: usize) -> (usize,
     let a32 = in_.arg1; // ret register
     let a36 = in_.arg1_word; // ret constant
 
-    // bitwise and
-    let a0 = gadgets::bitwise_and_u32(b, in_.arg0, in_.arg1);
+    let arg0bits = b.decode32(in_.arg0);
+    let arg1bits = b.decode32(in_.arg1);
+    // bitwise operations
+    let a0 = gadgets::bitwise_and_u32_bits(b, arg0bits, arg1bits);
+    let a28 = gadgets::bitwise_xor_u32_bits(b, arg0bits, arg1bits);
 
     // todo: select(in_.op / 4, ids) instead
     let mut ids = [ARG0; 37];
@@ -464,6 +467,7 @@ fn alu(b: &mut Builder<Word>, in_: AluIn, dst_out: usize, one: usize) -> (usize,
     ids[16] = a16;
     ids[20] = a20;
     ids[24] = a24;
+    ids[28] = a28;
     ids[32] = a32;
     ids[36] = a36;
 
@@ -696,8 +700,17 @@ mod test {
     #[test]
     fn and() {
         let prog = &and_000111_111000();
-        let args = vec![1, 2];
+        let args = vec![];
         let time_bound = 5;
+        let res = convert_and_eval(prog, args, time_bound);
+        assert_eq!(vec![0; res.len()], res);
+    }
+
+    #[test]
+    fn xor() {
+        let prog = &xor_0110_0101();
+        let args = vec![];
+        let time_bound = 6;
         let res = convert_and_eval(prog, args, time_bound);
         assert_eq!(vec![0; res.len()], res);
     }
