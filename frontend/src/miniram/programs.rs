@@ -344,105 +344,173 @@ pub fn rotr_8_0xb301() -> Prog {
 /// Returns a program which takes an input x and verifies that
 /// compressing x with SHA256 (as described in FIPS 180-2) yields
 /// the (hardcoded) mac.
-pub fn verify_compress(mac: [u32; 8]) -> Prog {
-    todo!()
+pub fn verify_compress(mac: [u32; 16]) -> Prog {
+    let adr_h = 64;
+    let mut b = build_compress(false);
+
+    for i in 0..8 {
+        b = b.mov_c(4, 0) // Register 4 holds the result
+            .mov_c(1, adr_h + i)
+            .ldr(2, 1)
+            .mov_c(3, mac[usize::try_from(i).unwrap()])
+            .sub(2, 2, 3)
+            .or(4, 4, 2, 6)
+    }
+    // Register 4 is 0 only if sha256(input)=mac
+    // Add 1 to the result
+    b.ret_r(4).build()
+}
+
+pub fn compress(verbose: bool) -> Prog {
+    let b = build_compress(verbose);
+    b.ret_c(0).build()
 }
 
 /// Returns a program which takes a 16 word input x and compresses x
 /// with SHA256.
 ///
 /// x is assumed to be padded (as described in FIPS 180-2).
-pub fn compress() -> Prog {
-    let mut b = Builder::new();
-    b = add_sha256_consts(b);
+pub fn build_compress(verbose: bool) -> Builder {
+    let mut b_ = Builder::new();
+    // hashes: 8 words
+    let adr_h = 64;
+    // consts: 64 words
+    let adr_k = 72;
+    // working vars: 64 words
+    let adr_w = 136;
+    // registers of local vars
+    let a = 8;
+    let b = 9;
+    let c = 10;
+    let d = 11;
+    let e = 12;
+    let f = 13;
+    let g = 14;
+    let h = 15;
+    // Registers for vars T1 and T2
+    let t1 = 7;
+    let t2 = 6;
 
-    // Load initial state (hash) into r8,..,r15
-    for i in 0..8 {
-        b = b.mov_c(1, 64 + u32::from(i)).ldr(i + 8, 1)
-    }
+    b_ = add_sha256_consts(b_, adr_h, adr_k);
 
-    // Do 64 rounds of hashing
-    for i in 0..64 {
-        let t0 = u8::wrapping_sub(8, i) % 8;
-        let t1 = u8::wrapping_sub(8 + 1, i) % 8;
-        let t2 = u8::wrapping_sub(8 + 2, i) % 8;
-        let t3 = u8::wrapping_sub(8 + 3, i) % 8;
-        let t4 = u8::wrapping_sub(8 + 4, i) % 8;
-        let t5 = u8::wrapping_sub(8 + 5, i) % 8;
-        let t6 = u8::wrapping_sub(8 + 6, i) % 8;
-        let t7 = u8::wrapping_sub(8 + 7, i) % 8;
-
-        let i = u32::from(i);
-        if i < 16 {
-            b = sha256_rounda(b, i, t0, t1, t2, t3, t4, t5, t6, t7);
+    // 1. Prepare message schedule W:
+    // Uses r1, r2, r3, r4, r5 and r6 as scratch registers
+    // todo: r6 is overwrites t1 if input is multiple blocks!
+    for t in 0..64u32 {
+        if t < 16 {
+            // Wt = Mt
+            b_ = b_.mov_c(1, t).ldr(2, 1).mov_c(1, adr_w + t).strr(1, 2)
         } else {
-            b = sha256_roundb(b, i, t0, t1, t2, t3, t4, t5, t6, t7);
+            // Wt = s1(Wt-2) + Wt-7 + s0(Wt-15) + Wt-16
+            b_ = b_.mov_c(4, adr_w + t - 2).ldr(4, 4);
+            b_ = sha256_s1(b_, 4, 5);
+            b_ = b_.mov_c(4, adr_w + t - 15).ldr(4, 4);
+            b_ = sha256_s0(b_, 4, 6);
+            b_ = b_.mov_c(1, adr_w + t - 7).ldr(1, 1);
+            b_ = b_.mov_c(2, adr_w + t - 16).ldr(2, 2);
+            b_ = b_.add(2, 1, 2).add(2, 2, 5).add(2, 2, 6);
+            b_ = b_.mov_c(1, adr_w + t).strr(1, 2)
         }
     }
 
-    // Working variables:
-    // a, b, c, d, e, f, g, h at adr 128, .., 135
-    // Temporay words T1, T2 at addr 136, 137
-    b.ret_c(0).build()
+    // 2. Initialize working vars
+    b_ = b_
+        .mov_c(1, adr_h)
+        .ldr(a, 1)
+        .mov_c(1, adr_h + 1)
+        .ldr(b, 1)
+        .mov_c(1, adr_h + 2)
+        .ldr(c, 1)
+        .mov_c(1, adr_h + 3)
+        .ldr(d, 1)
+        .mov_c(1, adr_h + 4)
+        .ldr(e, 1)
+        .mov_c(1, adr_h + 5)
+        .ldr(f, 1)
+        .mov_c(1, adr_h + 6)
+        .ldr(g, 1)
+        .mov_c(1, adr_h + 7)
+        .ldr(h, 1);
+
+    // 3. For t = 0 to 63 ...
+    for t in 0..64 {
+        // update t1
+        b_ = sha256_sigma1(b_, e, t1);
+        b_ = sha256_ch(b_, e, f, g, 2)
+            .add(t1, t1, 2)
+            .add(t1, t1, h)
+            .mov_c(1, adr_k + t)
+            .ldr(1, 1)
+            .add(t1, t1, 1)
+            .mov_c(1, adr_w + t)
+            .ldr(1, 1)
+            .add(t1, t1, 1);
+        // update t2
+        b_ = sha256_sigma0(b_, a, t2);
+        b_ = sha256_maj(b_, a, b, c, 1).add(t2, t2, 1);
+        // update a, b, ..., g, h
+        b_ = b_
+            .mov_r(h, g)
+            .mov_r(g, f)
+            .mov_r(f, e)
+            .add(1, d, t1)
+            .mov_r(e, 1)
+            .mov_r(d, c)
+            .mov_r(c, b)
+            .mov_r(b, a)
+            .add(1, t1, t2)
+            .mov_r(a, 1)
+    }
+
+    // 4. Update hashes and print them
+    b_ = b_
+        .mov_c(1, adr_h)
+        .ldr(2, 1)
+        .add(2, 2, a);
+    if verbose {b_ = b_.print(2);};
+    b_ = b_.strr(1, 2)
+        .mov_c(1, adr_h + 1)
+        .ldr(2, 1)
+        .add(2, 2, b);
+    if verbose {b_ = b_.print(2);};
+    b_ = b_.strr(1, 2)
+        .mov_c(1, adr_h + 2)
+        .ldr(2, 1)
+        .add(2, 2, c);
+    if verbose {b_ = b_.print(2);};
+    b_ = b_.strr(1, 2)
+        .mov_c(1, adr_h + 3)
+        .ldr(2, 1)
+        .add(2, 2, d);
+    if verbose {b_ = b_.print(2);};
+    b_ = b_.strr(1, 2)
+        .mov_c(1, adr_h + 4)
+        .ldr(2, 1)
+        .add(2, 2, e);
+    if verbose {b_ = b_.print(2);};
+    b_ = b_.strr(1, 2)
+        .mov_c(1, adr_h + 5)
+        .ldr(2, 1)
+        .add(2, 2, f);
+    if verbose {b_ = b_.print(2);};
+    b_ = b_.strr(1, 2)
+        .mov_c(1, adr_h + 6)
+        .ldr(2, 1)
+        .add(2, 2, g);
+    if verbose {b_ = b_.print(2);};
+    b_ = b_.strr(1, 2)
+        .mov_c(1, adr_h + 7)
+        .ldr(2, 1)
+        .add(2, 2, h);
+    if verbose {b_ = b_.print(2);};
+    b_ = b_.strr(1, 2);
+    b_
 }
 
-// Uses r4 as Wi
-#[allow(clippy::too_many_arguments)]
-fn sha256_rounda(
-    b: Builder,
-    i: u32,
-    t0: Reg,
-    t1: Reg,
-    t2: Reg,
-    t3: Reg,
-    t4: Reg,
-    t5: Reg,
-    t6: Reg,
-    t7: Reg,
-) -> Builder {
-    // Load input word
-    let b = b.mov_c(4, i);
-    sha256_roundtail(b, i, t0, t1, t2, t3, t4, t5, t6, t7)
-}
-
-#[allow(clippy::too_many_arguments)]
-fn sha256_roundb(
-    b: Builder,
-    i: u32,
-    t0: Reg,
-    t1: Reg,
-    t2: Reg,
-    t3: Reg,
-    t4: Reg,
-    t5: Reg,
-    t6: Reg,
-    t7: Reg,
-) -> Builder {
-    b
-}
-
-#[allow(clippy::too_many_arguments)]
-fn sha256_roundtail(
-    b: Builder,
-    i: u32,
-    t0: Reg,
-    t1: Reg,
-    t2: Reg,
-    t3: Reg,
-    t4: Reg,
-    t5: Reg,
-    t6: Reg,
-    t7: Reg,
-) -> Builder {
-    // Part 0
-    b = sha256_
-}
-
-
-// Initilizes constants in mem addresses 64,..,135
+// Initilizes constants in mem addresses 64,..,135:
 // Uses r1 and r2 as scratch registers
-fn add_sha256_consts(mut b: Builder) -> Builder {
-    // Move initial hash value to adr 64,65,..,71
+fn add_sha256_consts(mut b: Builder, mut adr_h: u32, mut adr_k: u32) -> Builder {
+    // initial hash values
     let hs = [
         0x6a09e667u32,
         0xbb67ae85u32,
@@ -453,16 +521,13 @@ fn add_sha256_consts(mut b: Builder) -> Builder {
         0x1f83d9abu32,
         0x5be0cd19u32,
     ];
-    let mut adr = 64u32;
     for h in hs {
-        b = b.mov_c(1, h).mov_c(2, adr).strr(2, 1);
-        adr += 1;
+        b = b.mov_c(1, h).mov_c(2, adr_h).strr(2, 1);
+        adr_h += 1;
     }
-    // Move K0,..,K63 to adr 72,...,135
-    let mut adr = 72u32;
-    for h in sha256::K32 {
-        b = b.mov_c(1, h).mov_c(2, adr).strr(2, 1);
-        adr += 1;
+    for k in sha256::K32 {
+        b = b.mov_c(1, k).mov_c(2, adr_k).strr(2, 1);
+        adr_k += 1;
     }
     b
 }
@@ -507,10 +572,10 @@ fn sha256_sigma1(b: Builder, x: Reg, dst: Reg) -> Builder {
         .xor(dst, dst, 3)
 }
 
-// Computes ch(x, y, z) = (x & z) + (x & y)
+// Computes ch(x, y, z) = z + (x & (y + z))
 // Uses r1, r2, r3 as caller-save registers
 fn sha256_ch(b: Builder, x: Reg, y: Reg, z: Reg, dst: Reg) -> Builder {
-    b.and(1, x, y).and(2, x, z).xor(dst, 1, 2)
+    b.xor(1, y, z).and(2, x, 1).xor(dst, 2, z)
 }
 
 // Computes maj(x, y, z) = (x & y) + (x & z) + (y & z)

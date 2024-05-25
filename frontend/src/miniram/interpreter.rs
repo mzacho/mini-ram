@@ -157,7 +157,7 @@ pub fn interpret(prog: &Prog, args: Vec<Word>, t: usize) -> Res<(Word, Vec<Local
                 let dst = usize::from(dst);
                 let x = usize::from(x);
                 let y = usize::from(y);
-                let v = st[x] + st[y];
+                let v = st[x].wrapping_add(st[y]);
                 set_flags(&mut cfl, v);
                 st[dst] = v;
                 MemAccess::None
@@ -232,7 +232,7 @@ pub fn interpret(prog: &Prog, args: Vec<Word>, t: usize) -> Res<(Word, Vec<Local
             }
             Inst::Print(r) => {
                 let x = st[usize::from(r)];
-                println!("{x}");
+                println!("{:#08x}", x);
                 MemAccess::None
             }
         };

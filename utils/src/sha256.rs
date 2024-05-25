@@ -25,6 +25,19 @@ pub fn pad(msg: &str) -> [u32; 16] {
     res
 }
 
+pub fn parse_mac(mac: &str) -> [u32; 16] {
+    let mut bytes = [0; 64];
+    for (i, x) in hex::decode(mac).unwrap().iter().enumerate() {
+        bytes[i] = *x;
+    }
+    let ints: [u32; 16] = transmute!(bytes);
+    let mut res = [0u32; 16];
+    for (i, x) in ints.iter().enumerate() {
+        res[i] = u32::from_be(*x);
+    }
+    res
+}
+
 /// Constants necessary for SHA-256 family of digests.
 pub const K32: [u32; 64] = [
     0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,

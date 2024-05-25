@@ -26,6 +26,7 @@ use utils::circuit::circuits;
 use crate::miniram::interpreter::interpret;
 use crate::miniram::programs;
 use crate::miniram::programs::compress;
+use crate::miniram::programs::verify_compress;
 use crate::miniram::reduction::encode_witness;
 use crate::miniram::reduction::generate_circuit;
 
@@ -78,6 +79,16 @@ fn main() {
                                     let prog = programs::const_0();
                                     let args = vec![];
                                     (prog, args)
+                                }
+                                "verify_compress" => {
+                                    let arg = arg.unwrap();
+                                    let mut arg = arg.split(',');
+                                    let msg = arg.next().unwrap();
+                                    let mac = arg.next().unwrap();
+                                    let msg_ = sha256::pad(msg);
+                                    let mac_ = sha256::parse_mac(mac);
+                                    let prog = programs::verify_compress(mac_);
+                                    (prog, Vec::from(msg_))
                                 }
 
                                 _ => {
@@ -187,22 +198,26 @@ fn main() {
             } else if let Some(prog) = run {
                 let time_bound = t.unwrap();
                 match prog.as_str() {
-                    "verify_digest" => {
+                    "verify_compress" => {
                         let arg = arg.unwrap();
                         let mut arg = arg.split(',');
-                        let mac = arg.next().unwrap();
                         let msg = arg.next().unwrap();
-                        println!("{mac} {msg}")
+                        let mac = arg.next().unwrap();
+                        let msg_ = sha256::pad(msg);
+                        let mac_ = sha256::parse_mac(mac);
+                        let prog = &verify_compress(mac_);
+                        println!("Running (verify_compress({mac}))({msg}):");
+                        let (res, _) = interpret(prog, Vec::from(msg_), time_bound).unwrap();
+                        println!("res={res}");
                     }
                     "compress" => {
                         let arg = arg.unwrap();
-                        let prog = &compress();
+                        let prog = &compress(true);
 
                         let arg_ = sha256::pad(&arg);
-                        //println!("pad({arg})={arg_:?}");
-                        println!("Running program..");
-                        let (res, _) = interpret(prog, Vec::from(arg_), time_bound).unwrap();
-                        println!("compress({arg})={res}")
+                        println!("Running compress({arg}):");
+                        let (_, _) = interpret(prog, Vec::from(arg_), time_bound).unwrap();
+                        println!();
                     }
                     _ => todo!(),
                 }

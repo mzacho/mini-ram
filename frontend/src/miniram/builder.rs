@@ -20,6 +20,15 @@ impl Builder {
         self.p.push(Inst::And(z, x, y));
         self
     }
+    pub fn or(mut self, z: Reg, x: Reg, y: Reg, scratch: Reg) -> Self {
+        self.p.push(Inst::Mov(scratch, Val::Const(0xFFFFFFFF)));
+        self.p.push(Inst::Xor(z, x, scratch)); // not x
+        self.p.push(Inst::Xor(scratch, y, scratch)); // not y
+        self.p.push(Inst::And(z, z, scratch));
+        self.p.push(Inst::Mov(scratch, Val::Const(0xFFFFFFFF)));
+        self.p.push(Inst::Xor(z, z, scratch)); // not ((not x) & (not y))
+        self
+    }
     pub fn xor(mut self, z: Reg, x: Reg, y: Reg) -> Self {
         self.p.push(Inst::Xor(z, x, y));
         self
