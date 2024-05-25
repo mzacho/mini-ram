@@ -486,8 +486,11 @@ fn alu(
     // rotr field4 arg0
     let a68 = b.select(in_.field4, rotrs);
 
+    // print
+    let a72 = dst_out;
+
     // todo: select(in_.op / 4, ids) instead
-    let mut ids = [ARG0; 69];
+    let mut ids = [ARG0; 73];
     ids[0] = a0;
     ids[2] = a2;
     ids[3] = a3;
@@ -502,6 +505,7 @@ fn alu(
     ids[36] = a36;
     ids[64] = a64;
     ids[68] = a68;
+    ids[72] = a72;
 
     let res = b.select(in_.op, &ids);
 

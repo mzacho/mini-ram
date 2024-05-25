@@ -17,12 +17,15 @@ use runners::run_v;
 use runners::run_vole;
 use std::env;
 use std::process::exit;
+use utils::sha256;
 
 use backend::ProofCtx;
 use utils::circuit::builder::Res as Circuit;
 use utils::circuit::circuits;
 
+use crate::miniram::interpreter::interpret;
 use crate::miniram::programs;
+use crate::miniram::programs::compress;
 use crate::miniram::reduction::encode_witness;
 use crate::miniram::reduction::generate_circuit;
 
@@ -46,138 +49,167 @@ fn main() {
             prog,
             t,
             circuit,
+            run,
+            arg,
         }) => {
             println!("Successfully parsed args");
 
-            let deterministic = true;
-            let mut ctx = if deterministic {
-                ProofCtx::new_deterministic()
-            } else {
-                ProofCtx::new_random()
-            };
+            if let Some(party) = party {
+                let deterministic = true;
+                let mut ctx = if deterministic {
+                    ProofCtx::new_deterministic()
+                } else {
+                    ProofCtx::new_random()
+                };
 
-            match party.as_str() {
-                "prover" | "verifier" => {
-                    assert!(port_vole.is_some());
-                    let (c, w) = if prog.is_some() & t.is_some() {
-                        let prog = prog.unwrap();
-                        let t = t.unwrap();
-                        let (prog, args) = match prog.as_str() {
-                            "mul_eq" => {
-                                let prog = programs::mul_eq();
-                                let args = vec![2, 2, 4];
-                                (prog, args)
-                            }
-                            "const0" => {
-                                let prog = programs::const_0();
-                                let args = vec![];
-                                (prog, args)
-                            }
+                match party.as_str() {
+                    "prover" | "verifier" => {
+                        assert!(port_vole.is_some());
+                        let (c, w) = if prog.is_some() & t.is_some() {
+                            let prog = prog.unwrap();
+                            let t = t.unwrap();
+                            let (prog, args) = match prog.as_str() {
+                                "mul_eq" => {
+                                    let prog = programs::mul_eq();
+                                    let args = vec![2, 2, 4];
+                                    (prog, args)
+                                }
+                                "const0" => {
+                                    let prog = programs::const_0();
+                                    let args = vec![];
+                                    (prog, args)
+                                }
 
-                            _ => {
-                                println!("don't understand: {}", prog);
-                                exit(1);
+                                _ => {
+                                    println!("don't understand: {}", prog);
+                                    exit(1);
+                                }
+                            };
+                            ctx.start_time("encode witness");
+                            let w = encode_witness(&prog, args, t, &mut ctx).unwrap(); // todo: handle
+                            ctx.stop_time();
+                            ctx.start_time("generate circuit");
+                            let c = generate_circuit(&prog, t);
+                            ctx.stop_time();
+                            (c, w)
+                        } else if let Some(circuit) = circuit {
+                            match circuit.as_str() {
+                                "add_eq_42" => {
+                                    let c = circuits::add_eq_42();
+                                    let w = vec![21, 21];
+                                    (c, w)
+                                }
+                                "add_eq" => {
+                                    let c = circuits::add_eq();
+                                    let w = vec![21, 21, 42];
+                                    (c, w)
+                                }
+                                "mul_eq" => {
+                                    let c = circuits::mul_eq();
+                                    let w = vec![2, 2, 4];
+                                    (c, w)
+                                }
+                                "mul_const" => {
+                                    let c = circuits::mul_const();
+                                    let w = vec![42, 42 * 42];
+                                    (c, w)
+                                }
+                                "mul_mul_eq" => {
+                                    let c = circuits::mul_mul_eq();
+                                    let w = vec![2, 2, 7, 28];
+                                    (c, w)
+                                }
+                                "pow_eq" => {
+                                    let c = circuits::pow();
+                                    let w = vec![2, 3, 8];
+                                    (c, w)
+                                }
+                                "select_eq" => {
+                                    let c = circuits::select_eq();
+                                    let w = vec![0, 0, 1];
+                                    (c, w)
+                                }
+                                "select_eq2" => {
+                                    let c = circuits::select_eq2();
+                                    let w = vec![2, 1337, 1, 0, 42];
+                                    (c, w)
+                                }
+                                "select_const" => {
+                                    let c = circuits::select_const(0, 1);
+                                    let w = vec![0];
+                                    (c, w)
+                                }
+                                "select_const_vec" => {
+                                    let c = circuits::select_const_vec(&[0, 1, 2, 3, 0, 5]);
+                                    let w = vec![4];
+                                    (c, w)
+                                }
+                                "encode4" => {
+                                    let c = circuits::encode4(1 + 2 + 8);
+                                    let w = vec![1, 1, 0, 1];
+                                    (c, w)
+                                }
+                                "decode32" => {
+                                    let c = circuits::decode32();
+                                    let w = vec![0];
+                                    (c, w)
+                                }
+                                "w_all_eq_but_one" => {
+                                    let c = circuits::check_all_eq_but_one();
+                                    let w = vec![1, 43, 43, 2, 3];
+                                    (c, w)
+                                }
+                                _ => {
+                                    println!("don't understand: {}", circuit);
+                                    exit(1);
+                                }
                             }
+                        } else {
+                            println!("err: no prog and time-bound or curcuit ");
+                            exit(1);
                         };
-                        ctx.start_time("encode witness");
-                        let w = encode_witness(&prog, args, t, &mut ctx).unwrap(); // todo: handle
-                        ctx.stop_time();
-                        ctx.start_time("generate circuit");
-                        let c = generate_circuit(&prog, t);
-                        ctx.stop_time();
-                        (c, w)
-                    } else if let Some(circuit) = circuit {
-                        match circuit.as_str() {
-                            "add_eq_42" => {
-                                let c = circuits::add_eq_42();
-                                let w = vec![21, 21];
-                                (c, w)
+                        match party.as_ref() {
+                            "prover" => {
+                                print_circuit_stats(&c);
+                                run_p(port.unwrap(), port_vole.unwrap(), c, w, ctx)
                             }
-                            "add_eq" => {
-                                let c = circuits::add_eq();
-                                let w = vec![21, 21, 42];
-                                (c, w)
-                            }
-                            "mul_eq" => {
-                                let c = circuits::mul_eq();
-                                let w = vec![2, 2, 4];
-                                (c, w)
-                            }
-                            "mul_const" => {
-                                let c = circuits::mul_const();
-                                let w = vec![42, 42 * 42];
-                                (c, w)
-                            }
-                            "mul_mul_eq" => {
-                                let c = circuits::mul_mul_eq();
-                                let w = vec![2, 2, 7, 28];
-                                (c, w)
-                            }
-                            "pow_eq" => {
-                                let c = circuits::pow();
-                                let w = vec![2, 3, 8];
-                                (c, w)
-                            }
-                            "select_eq" => {
-                                let c = circuits::select_eq();
-                                let w = vec![0, 0, 1];
-                                (c, w)
-                            }
-                            "select_eq2" => {
-                                let c = circuits::select_eq2();
-                                let w = vec![2, 1337, 1, 0, 42];
-                                (c, w)
-                            }
-                            "select_const" => {
-                                let c = circuits::select_const(0, 1);
-                                let w = vec![0];
-                                (c, w)
-                            }
-                            "select_const_vec" => {
-                                let c = circuits::select_const_vec(&[0, 1, 2, 3, 0, 5]);
-                                let w = vec![4];
-                                (c, w)
-                            }
-                            "encode4" => {
-                                let c = circuits::encode4(1 + 2 + 8);
-                                let w = vec![1, 1, 0, 1];
-                                (c, w)
-                            }
-                            "decode32" => {
-                                let c = circuits::decode32();
-                                let w = vec![0];
-                                (c, w)
-                            }
-                            "w_all_eq_but_one" => {
-                                let c = circuits::check_all_eq_but_one();
-                                let w = vec![1, 43, 43, 2, 3];
-                                (c, w)
-                            }
-                            _ => {
-                                println!("don't understand: {}", circuit);
-                                exit(1);
-                            }
+                            "verifier" => run_v(port.unwrap(), port_vole.unwrap(), c, ctx),
+                            _ => panic!("unreachable"),
                         }
-                    } else {
-                        println!("err: no prog and time-bound or curcuit ");
+                    }
+                    "vole" => run_vole(port.unwrap(), ctx),
+                    _ => {
+                        println!("don't understand: {}", party);
                         exit(1);
-                    };
-                    match party.as_ref() {
-                        "prover" => {
-                            print_circuit_stats(&c);
-                            run_p(port, port_vole.unwrap(), c, w, ctx)
-                        }
-                        "verifier" => run_v(port, port_vole.unwrap(), c, ctx),
-                        _ => panic!("unreachable"),
                     }
                 }
-                "vole" => run_vole(port, ctx),
-                _ => {
-                    println!("don't understand: {}", party);
-                    exit(1);
+                .unwrap();
+            } else if let Some(prog) = run {
+                let time_bound = t.unwrap();
+                match prog.as_str() {
+                    "verify_digest" => {
+                        let arg = arg.unwrap();
+                        let mut arg = arg.split(',');
+                        let mac = arg.next().unwrap();
+                        let msg = arg.next().unwrap();
+                        println!("{mac} {msg}")
+                    }
+                    "compress" => {
+                        let arg = arg.unwrap();
+                        let prog = &compress();
+
+                        let arg_ = sha256::pad(&arg);
+                        //println!("pad({arg})={arg_:?}");
+                        println!("Running program..");
+                        let (res, _) = interpret(prog, Vec::from(arg_), time_bound).unwrap();
+                        println!("compress({arg})={res}")
+                    }
+                    _ => todo!(),
                 }
+            } else {
+                println!("--run or --party must be set");
+                exit(1);
             }
-            .unwrap();
         }
         Err(error) => {
             println!("{}", error);
@@ -208,12 +240,14 @@ fn print_circuit_stats<T>(c: &Circuit<T>) {
 }
 
 struct ParseRes {
-    party: String,
-    port: u16,
+    party: Option<String>,
+    port: Option<u16>,
     port_vole: Option<u16>,
     prog: Option<String>,
     t: Option<usize>,
     circuit: Option<String>,
+    run: Option<String>,
+    arg: Option<String>,
 }
 
 fn parse(input: std::env::Args) -> Result<ParseRes, ArgsError> {
@@ -223,7 +257,7 @@ fn parse(input: std::env::Args) -> Result<ParseRes, ArgsError> {
         "party",
         "Which party to execute protocol as",
         "PARTY",
-        Occur::Req,
+        Occur::Optional,
         None,
     );
 
@@ -232,7 +266,7 @@ fn parse(input: std::env::Args) -> Result<ParseRes, ArgsError> {
         "port",
         "Port of the prover on localhost",
         "PROVER_PORT",
-        Occur::Req,
+        Occur::Optional,
         None,
     );
 
@@ -272,15 +306,36 @@ fn parse(input: std::env::Args) -> Result<ParseRes, ArgsError> {
         None,
     );
 
+    args.option(
+        "",
+        "run",
+        "Which MiniRAM program to interpret directly",
+        "PROG",
+        Occur::Optional,
+        None,
+    );
+
+    args.option(
+        "",
+        "arg",
+        "Which arguments for --run",
+        "PROG",
+        Occur::Optional,
+        None,
+    );
+
     args.parse(input)?;
 
-    let party = args.value_of("party").unwrap();
-    let port = args.value_of("port").unwrap();
+    let party = args.optional_value_of("party").unwrap();
+    let port = args.optional_value_of("port").unwrap();
     let port_vole = args.optional_value_of("vole-port").unwrap();
 
     let prog = args.optional_value_of("prog").unwrap();
     let t = args.optional_value_of("time-bound").unwrap();
     let circuit = args.optional_value_of("circuit").unwrap();
+
+    let run = args.optional_value_of("run").unwrap();
+    let arg = args.optional_value_of("arg").unwrap();
 
     Ok(ParseRes {
         party,
@@ -289,5 +344,7 @@ fn parse(input: std::env::Args) -> Result<ParseRes, ArgsError> {
         prog,
         t,
         circuit,
+        run,
+        arg,
     })
 }

@@ -52,6 +52,8 @@ pub enum Inst {
     B(Option<Cond>, Reg),
     // Halting
     Ret(Val),
+    // Debugging
+    Print(Reg),
 }
 
 #[derive(Debug, Clone, Copy)]

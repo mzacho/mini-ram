@@ -117,7 +117,7 @@ pub fn interpret(prog: &Prog, args: Vec<Word>, t: usize) -> Res<(Word, Vec<Local
     let pc = usize::from(PC);
     let mut i = fetch(prog, st[pc])?;
     let res = loop {
-        dbg!(&st, &cfl, i);
+        // dbg!(&st, &cfl, i);
         let ma = match *i {
             Inst::And(dst, x, y) => {
                 let dst = usize::from(dst);
@@ -229,6 +229,11 @@ pub fn interpret(prog: &Prog, args: Vec<Word>, t: usize) -> Res<(Word, Vec<Local
                 //inc_pc(&mut st);
                 sts.push(record(&st, &cfl, MemAccess::None, sts.len()));
                 break v;
+            }
+            Inst::Print(r) => {
+                let x = st[usize::from(r)];
+                println!("{x}");
+                MemAccess::None
             }
         };
         inc_pc(&mut st);

@@ -112,6 +112,10 @@ fn encode_instr(i: &Inst) -> EInst64 {
             let (arg1, op_offset) = encode_val(x);
             encode_instr_u64(opcode + op_offset, dst, arg0, arg1)
         }
+        Print(_) => {
+            let opcode = 0b1001000;
+            encode_instr_u64(opcode, 0, 0, 0)
+        }
     }
 }
 

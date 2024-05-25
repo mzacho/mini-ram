@@ -1,3 +1,5 @@
+use utils::sha256;
+
 use crate::miniram::builder::*;
 use crate::miniram::lang::{reg::*, Prog, Reg};
 
@@ -337,6 +339,188 @@ pub fn rotr_8_0xb301() -> Prog {
         .sub(3, 2, 1)
         .ret_r(3)
         .build()
+}
+
+/// Returns a program which takes an input x and verifies that
+/// compressing x with SHA256 (as described in FIPS 180-2) yields
+/// the (hardcoded) mac.
+pub fn verify_compress(mac: [u32; 8]) -> Prog {
+    todo!()
+}
+
+/// Returns a program which takes a 16 word input x and compresses x
+/// with SHA256.
+///
+/// x is assumed to be padded (as described in FIPS 180-2).
+pub fn compress() -> Prog {
+    let mut b = Builder::new();
+    b = add_sha256_consts(b);
+
+    // Load initial state (hash) into r8,..,r15
+    for i in 0..8 {
+        b = b.mov_c(1, 64 + u32::from(i)).ldr(i + 8, 1)
+    }
+
+    // Do 64 rounds of hashing
+    for i in 0..64 {
+        let t0 = u8::wrapping_sub(8, i) % 8;
+        let t1 = u8::wrapping_sub(8 + 1, i) % 8;
+        let t2 = u8::wrapping_sub(8 + 2, i) % 8;
+        let t3 = u8::wrapping_sub(8 + 3, i) % 8;
+        let t4 = u8::wrapping_sub(8 + 4, i) % 8;
+        let t5 = u8::wrapping_sub(8 + 5, i) % 8;
+        let t6 = u8::wrapping_sub(8 + 6, i) % 8;
+        let t7 = u8::wrapping_sub(8 + 7, i) % 8;
+
+        let i = u32::from(i);
+        if i < 16 {
+            b = sha256_rounda(b, i, t0, t1, t2, t3, t4, t5, t6, t7);
+        } else {
+            b = sha256_roundb(b, i, t0, t1, t2, t3, t4, t5, t6, t7);
+        }
+    }
+
+    // Working variables:
+    // a, b, c, d, e, f, g, h at adr 128, .., 135
+    // Temporay words T1, T2 at addr 136, 137
+    b.ret_c(0).build()
+}
+
+// Uses r4 as Wi
+#[allow(clippy::too_many_arguments)]
+fn sha256_rounda(
+    b: Builder,
+    i: u32,
+    t0: Reg,
+    t1: Reg,
+    t2: Reg,
+    t3: Reg,
+    t4: Reg,
+    t5: Reg,
+    t6: Reg,
+    t7: Reg,
+) -> Builder {
+    // Load input word
+    let b = b.mov_c(4, i);
+    sha256_roundtail(b, i, t0, t1, t2, t3, t4, t5, t6, t7)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn sha256_roundb(
+    b: Builder,
+    i: u32,
+    t0: Reg,
+    t1: Reg,
+    t2: Reg,
+    t3: Reg,
+    t4: Reg,
+    t5: Reg,
+    t6: Reg,
+    t7: Reg,
+) -> Builder {
+    b
+}
+
+#[allow(clippy::too_many_arguments)]
+fn sha256_roundtail(
+    b: Builder,
+    i: u32,
+    t0: Reg,
+    t1: Reg,
+    t2: Reg,
+    t3: Reg,
+    t4: Reg,
+    t5: Reg,
+    t6: Reg,
+    t7: Reg,
+) -> Builder {
+    // Part 0
+    b = sha256_
+}
+
+
+// Initilizes constants in mem addresses 64,..,135
+// Uses r1 and r2 as scratch registers
+fn add_sha256_consts(mut b: Builder) -> Builder {
+    // Move initial hash value to adr 64,65,..,71
+    let hs = [
+        0x6a09e667u32,
+        0xbb67ae85u32,
+        0x3c6ef372u32,
+        0xa54ff53au32,
+        0x510e527fu32,
+        0x9b05688cu32,
+        0x1f83d9abu32,
+        0x5be0cd19u32,
+    ];
+    let mut adr = 64u32;
+    for h in hs {
+        b = b.mov_c(1, h).mov_c(2, adr).strr(2, 1);
+        adr += 1;
+    }
+    // Move K0,..,K63 to adr 72,...,135
+    let mut adr = 72u32;
+    for h in sha256::K32 {
+        b = b.mov_c(1, h).mov_c(2, adr).strr(2, 1);
+        adr += 1;
+    }
+    b
+}
+
+// Computes s0(x) = ROTR_7(x) + ROTR_18(x) + SHR_3(x)
+// Uses r1, r2, r3 as caller-save registers
+fn sha256_s0(b: Builder, x: Reg, dst: Reg) -> Builder {
+    b.rotr(1, 7, x)
+        .rotr(2, 18, x)
+        .shr(3, 3, x)
+        .xor(dst, 1, 2)
+        .xor(dst, dst, 3)
+}
+
+// Computes s1(x) = ROTR_17(x) + ROTR_19(x) + SHR_10(x)
+// Uses r1, r2, r3 as caller-save registers
+fn sha256_s1(b: Builder, x: Reg, dst: Reg) -> Builder {
+    b.rotr(1, 17, x)
+        .rotr(2, 19, x)
+        .shr(3, 10, x)
+        .xor(dst, 1, 2)
+        .xor(dst, dst, 3)
+}
+
+// Computes sigma0(x) = ROTR_2(x) + ROTR_13(x) + ROTR_22(x)
+// Uses r1, r2, r3 as caller-save registers
+fn sha256_sigma0(b: Builder, x: Reg, dst: Reg) -> Builder {
+    b.rotr(1, 2, x)
+        .rotr(2, 13, x)
+        .rotr(3, 22, x)
+        .xor(dst, 1, 2)
+        .xor(dst, dst, 3)
+}
+
+// Computes sigma1(x) = ROTR_6(x) + ROTR_11(x) + ROTR_25(x)
+// Uses r1, r2, r3 as caller-save registers
+fn sha256_sigma1(b: Builder, x: Reg, dst: Reg) -> Builder {
+    b.rotr(1, 6, x)
+        .rotr(2, 11, x)
+        .rotr(3, 25, x)
+        .xor(dst, 1, 2)
+        .xor(dst, dst, 3)
+}
+
+// Computes ch(x, y, z) = (x & z) + (x & y)
+// Uses r1, r2, r3 as caller-save registers
+fn sha256_ch(b: Builder, x: Reg, y: Reg, z: Reg, dst: Reg) -> Builder {
+    b.and(1, x, y).and(2, x, z).xor(dst, 1, 2)
+}
+
+// Computes maj(x, y, z) = (x & y) + (x & z) + (y & z)
+// Uses r1, r2, r3 as caller-save registers
+fn sha256_maj(b: Builder, x: Reg, y: Reg, z: Reg, dst: Reg) -> Builder {
+    b.and(1, x, y)
+        .and(2, x, z)
+        .and(3, y, z)
+        .xor(dst, 1, 2)
+        .xor(dst, dst, 3)
 }
 
 #[test]

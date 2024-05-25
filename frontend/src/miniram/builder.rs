@@ -70,4 +70,9 @@ impl Builder {
         self.p.push(Inst::Ret(Val::Const(c)));
         self
     }
+
+    pub fn print(mut self, r: Reg) -> Self {
+        self.p.push(Inst::Print(r));
+        self
+    }
 }
