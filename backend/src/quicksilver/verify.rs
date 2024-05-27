@@ -425,12 +425,19 @@ fn eval(
                 assert_eq!(mac, sum.wrapping_add(delta.wrapping_mul(j - 1)));
             }
             OP_DEBUG => {
-                dbg!("here");
+                let msg = gates[i] - ARG0;
+                dbg!(msg);
+                i += 1;
+            }
+            OP_DEBUG_WIRE => {
+                let id = gates[i] - ARG0;
+                dbg!(wires.zm[id]);
+                i += 1;
             }
 
             _ => panic!("invalid operation"),
         }
-        if (op != OP_OUT) & !is_check(op) & !matches!(op, OP_DEBUG) {
+        if (op != OP_OUT) & !is_check(op) & !matches!(op, OP_DEBUG | OP_DEBUG_WIRE) {
             wires.zm.push(res);
         }
         // dbg!(&wires);

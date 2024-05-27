@@ -557,12 +557,19 @@ fn eval(
                 openings.push(sum)
             }
             OP_DEBUG => {
-                dbg!("here");
+                let msg = gates[i] - ARG0;
+                dbg!(msg);
+                i += 1;
+            }
+            OP_DEBUG_WIRE => {
+                let id = gates[i] - ARG0;
+                dbg!(wires.clear[id]);
+                i += 1;
             }
 
             _ => panic!("invalid operation"),
         }
-        if (op != OP_OUT) & !is_check(op) & !matches!(op, OP_DEBUG) {
+        if (op != OP_OUT) & !is_check(op) & !matches!(op, OP_DEBUG | OP_DEBUG_WIRE) {
             wires.clear.push(res_x);
             wires.macs.push(res_t);
         }

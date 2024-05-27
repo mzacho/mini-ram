@@ -57,6 +57,29 @@ pub fn const_0() -> Prog {
     Builder::new().ret_c(0).build()
 }
 
+/// RET (8 >> 1) - 4
+pub fn shr() -> Prog {
+    Builder::new()
+        .mov_c(1, 8)
+        .shr(1, 1, 1)
+        .mov_c(2, 4)
+        .sub(1, 2, 1)
+        .ret_r(1)
+        .build()
+}
+
+/// RET (1 >>> 1) - 0x80000000
+pub fn rotr() -> Prog {
+    Builder::new()
+        .mov_c(1, 1)
+        .rotr(1, 1, 1)
+        .mov_c(2, 0x80000000)
+        .print(1)
+        .sub(1, 2, 1)
+        .ret_r(1)
+        .build()
+}
+
 /// MOV r2, 0; RET r2
 #[cfg(test)]
 pub fn mov0_ret() -> Prog {
@@ -349,7 +372,8 @@ pub fn verify_compress(mac: [u32; 16]) -> Prog {
     let mut b = build_compress(false);
 
     for i in 0..8 {
-        b = b.mov_c(4, 0) // Register 4 holds the result
+        b = b
+            .mov_c(4, 0) // Register 4 holds the result
             .mov_c(1, adr_h + i)
             .ldr(2, 1)
             .mov_c(3, mac[usize::try_from(i).unwrap()])
@@ -463,46 +487,38 @@ pub fn build_compress(verbose: bool) -> Builder {
     }
 
     // 4. Update hashes and print them
-    b_ = b_
-        .mov_c(1, adr_h)
-        .ldr(2, 1)
-        .add(2, 2, a);
-    if verbose {b_ = b_.print(2);};
-    b_ = b_.strr(1, 2)
-        .mov_c(1, adr_h + 1)
-        .ldr(2, 1)
-        .add(2, 2, b);
-    if verbose {b_ = b_.print(2);};
-    b_ = b_.strr(1, 2)
-        .mov_c(1, adr_h + 2)
-        .ldr(2, 1)
-        .add(2, 2, c);
-    if verbose {b_ = b_.print(2);};
-    b_ = b_.strr(1, 2)
-        .mov_c(1, adr_h + 3)
-        .ldr(2, 1)
-        .add(2, 2, d);
-    if verbose {b_ = b_.print(2);};
-    b_ = b_.strr(1, 2)
-        .mov_c(1, adr_h + 4)
-        .ldr(2, 1)
-        .add(2, 2, e);
-    if verbose {b_ = b_.print(2);};
-    b_ = b_.strr(1, 2)
-        .mov_c(1, adr_h + 5)
-        .ldr(2, 1)
-        .add(2, 2, f);
-    if verbose {b_ = b_.print(2);};
-    b_ = b_.strr(1, 2)
-        .mov_c(1, adr_h + 6)
-        .ldr(2, 1)
-        .add(2, 2, g);
-    if verbose {b_ = b_.print(2);};
-    b_ = b_.strr(1, 2)
-        .mov_c(1, adr_h + 7)
-        .ldr(2, 1)
-        .add(2, 2, h);
-    if verbose {b_ = b_.print(2);};
+    b_ = b_.mov_c(1, adr_h).ldr(2, 1).add(2, 2, a);
+    if verbose {
+        b_ = b_.print(2);
+    };
+    b_ = b_.strr(1, 2).mov_c(1, adr_h + 1).ldr(2, 1).add(2, 2, b);
+    if verbose {
+        b_ = b_.print(2);
+    };
+    b_ = b_.strr(1, 2).mov_c(1, adr_h + 2).ldr(2, 1).add(2, 2, c);
+    if verbose {
+        b_ = b_.print(2);
+    };
+    b_ = b_.strr(1, 2).mov_c(1, adr_h + 3).ldr(2, 1).add(2, 2, d);
+    if verbose {
+        b_ = b_.print(2);
+    };
+    b_ = b_.strr(1, 2).mov_c(1, adr_h + 4).ldr(2, 1).add(2, 2, e);
+    if verbose {
+        b_ = b_.print(2);
+    };
+    b_ = b_.strr(1, 2).mov_c(1, adr_h + 5).ldr(2, 1).add(2, 2, f);
+    if verbose {
+        b_ = b_.print(2);
+    };
+    b_ = b_.strr(1, 2).mov_c(1, adr_h + 6).ldr(2, 1).add(2, 2, g);
+    if verbose {
+        b_ = b_.print(2);
+    };
+    b_ = b_.strr(1, 2).mov_c(1, adr_h + 7).ldr(2, 1).add(2, 2, h);
+    if verbose {
+        b_ = b_.print(2);
+    };
     b_ = b_.strr(1, 2);
     b_
 }

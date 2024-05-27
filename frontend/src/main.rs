@@ -80,6 +80,16 @@ fn main() {
                                     let args = vec![];
                                     (prog, args)
                                 }
+                                "shr" => {
+                                    let prog = programs::shr();
+                                    let args = vec![];
+                                    (prog, args)
+                                }
+                                "rotr" => {
+                                    let prog = programs::rotr();
+                                    let args = vec![];
+                                    (prog, args)
+                                }
                                 "verify_compress" => {
                                     let arg = arg.unwrap();
                                     let mut arg = arg.split(',');

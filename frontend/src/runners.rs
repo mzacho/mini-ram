@@ -74,7 +74,7 @@ pub fn run_vole(port: u16, mut ctx: ProofCtx) -> std::io::Result<()> {
     // fill random bytes in 1KB blocks
     let mut buf_val: [u128; 32] = [0; 32];
     let mut buf_key: [u128; 32] = [0; 32];
-    let one_tenth_done = (n / 64) / 10;
+    let one_tenth_done = (n / 32) / 10;
     let mut ctr = 0;
     ctx.start_time("vole");
     for i in 0..(n / 32) + 3 {

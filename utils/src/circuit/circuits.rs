@@ -224,4 +224,17 @@ mod test {
         let w = vec![2, 2, 4];
         assert_eq!(*eval32(c, w).last().unwrap(), 0)
     }
+
+    #[test]
+    fn test_debug_wire() {
+        let n_in = 2;
+        let x = ARG0;
+        let y = ARG0 + 1;
+        let mut b = Builder::new(n_in);
+        let mul = b.mul(x, y);
+        let dbg = b.debug_wire(mul);
+        let c = &b.build(&[mul]);
+        let w = vec![3, 5];
+        assert_eq!(*eval32(c, w).last().unwrap(), 15)
+    }
 }

@@ -117,9 +117,9 @@ pub fn generate_circuit(prog: &Prog, time_bound: usize) -> builder::Res<Word> {
     // hard-code program
     let p = encode(prog);
     let n_instr = p.len();
-    for instr in p {
-        let lo = instr as u32;
-        let hi = (instr >> 32) as u32;
+    for instr in &p {
+        let lo = *instr as u32;
+        let hi = (*instr >> 32) as u32;
         let _ = b.push_const(hi);
         let _ = b.push_const(lo);
         // id of constant gate can be ignored: As the gates are the
@@ -151,6 +151,10 @@ pub fn generate_circuit(prog: &Prog, time_bound: usize) -> builder::Res<Word> {
     perm_in_3.push(is_load);
 
     for step in 1..time_bound {
+        b.debug(step);
+        if step < p.len() {
+            b.debug(p[step].try_into().unwrap());
+        }
         let (mut o, adr, v, is_load) = trans_circ(&mut b, step - 1, n_instr, zero, one, id_two);
         ctr = b.add(&[ctr, one]);
         outputs.append(&mut o);
@@ -333,6 +337,11 @@ fn trans_circ(
     let k0 = i * SIZE_LOCAL_ST + ARG0;
     let k1 = (i + 1) * SIZE_LOCAL_ST + ARG0;
     let k2 = (i + 2) * SIZE_LOCAL_ST + ARG0;
+
+    for (i, w) in (k0..k1).enumerate() {
+        b.debug(i);
+        b.debug_wire(w);
+    }
 
     // Fetch instruction
     let pc = k0 + usize::from(PC);

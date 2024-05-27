@@ -33,9 +33,10 @@ pub const OP_CHECK_AND: usize = 14;
 pub const OP_CHECK_ALL_EQ_BUT_ONE: usize = 15;
 
 pub const OP_DEBUG: usize = 20;
+pub const OP_DEBUG_WIRE: usize = 24;
 
 /// Index of the first two arguments
-pub const ARG0: usize = 24;
+pub const ARG0: usize = 25;
 pub const ARG1: usize = ARG0 + 1;
 
 use std::u32::MAX as U32MAX;
@@ -285,12 +286,19 @@ pub fn eval64(c: &Circuit<u64>, mut wires: Vec<u64>) -> Vec<u64> {
                 assert!(res_)
             }
             OP_DEBUG => {
-                dbg!("here");
+                let msg = gates[i] - ARG0;
+                dbg!(msg);
+                i += 1;
+            }
+            OP_DEBUG_WIRE => {
+                let id = gates[i] - ARG0;
+                dbg!(wires[id]);
+                i += 1;
             }
 
             _ => panic!("invalid operation"),
         }
-        if (op != OP_OUT) & !is_check(op) & !matches!(op, OP_DEBUG) {
+        if (op != OP_OUT) & !is_check(op) & !matches!(op, OP_DEBUG | OP_DEBUG_WIRE) {
             // dbg!(res);
             wires.push(res);
         }
@@ -541,12 +549,19 @@ pub fn eval32(c: &Circuit<u32>, mut wires: Vec<u32>) -> Vec<u32> {
                 assert!(res_)
             }
             OP_DEBUG => {
-                dbg!("here");
+                let msg = gates[i] - ARG0;
+                dbg!(msg);
+                i += 1;
+            }
+            OP_DEBUG_WIRE => {
+                let id = gates[i] - ARG0;
+                dbg!(wires[id]);
+                i += 1;
             }
 
             _ => panic!("invalid operation"),
         }
-        if (op != OP_OUT) & !is_check(op) & !matches!(op, OP_DEBUG) {
+        if (op != OP_OUT) & !is_check(op) & !matches!(op, OP_DEBUG | OP_DEBUG_WIRE) {
             //dbg!(res);
             wires.push(res);
         }

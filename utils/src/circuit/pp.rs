@@ -87,7 +87,13 @@ fn n_values(op: usize) -> usize {
         1
     } else if matches!(
         op,
-        OP_OUT | OP_CHECK_Z | OP_CHECK_EQ | OP_CHECK_AND | OP_CHECK_ALL_EQ_BUT_ONE | OP_DEBUG
+        OP_OUT
+            | OP_CHECK_Z
+            | OP_CHECK_EQ
+            | OP_CHECK_AND
+            | OP_CHECK_ALL_EQ_BUT_ONE
+            | OP_DEBUG
+            | OP_DEBUG_WIRE
     ) {
         0
     } else if matches!(op, OP_DECODE32) {
@@ -186,6 +192,7 @@ fn str_of_op(op: usize) -> &'static str {
         OP_CHECK_AND => "OP_CHECK_AND",
         OP_CHECK_ALL_EQ_BUT_ONE => "OP_CHECK_ALL_EQ_BUT_ONE",
         OP_DEBUG => "OP_DEBUG",
+        OP_DEBUG_WIRE => "OP_DEBUG_WIRE",
         _ => panic!("invalid op"),
     }
 }

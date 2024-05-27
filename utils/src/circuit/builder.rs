@@ -414,10 +414,19 @@ impl<T> Builder<T> {
         self.offset_arg0 = true
     }
 
-    pub fn debug(&mut self) {
+    pub fn debug(&mut self, msg: usize) {
         use super::OP_DEBUG;
 
         self.gates.push(OP_DEBUG);
+        self.gates.push(msg + ARG0);
+        self.n_gates += 1;
+    }
+
+    pub fn debug_wire(&mut self, id: usize) {
+        use super::OP_DEBUG_WIRE;
+
+        self.gates.push(OP_DEBUG_WIRE);
+        self.gates.push(id);
         self.n_gates += 1;
     }
 
