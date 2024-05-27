@@ -151,10 +151,10 @@ pub fn generate_circuit(prog: &Prog, time_bound: usize) -> builder::Res<Word> {
     perm_in_3.push(is_load);
 
     for step in 1..time_bound {
-        b.debug(step);
-        if step < p.len() {
-            b.debug(p[step].try_into().unwrap());
-        }
+        // b.debug(step);
+        // if step < p.len() {
+        //     b.debug(p[step].try_into().unwrap());
+        // }
         let (mut o, adr, v, is_load) = trans_circ(&mut b, step - 1, n_instr, zero, one, id_two);
         ctr = b.add(&[ctr, one]);
         outputs.append(&mut o);
@@ -338,10 +338,10 @@ fn trans_circ(
     let k1 = (i + 1) * SIZE_LOCAL_ST + ARG0;
     let k2 = (i + 2) * SIZE_LOCAL_ST + ARG0;
 
-    for (i, w) in (k0..k1).enumerate() {
-        b.debug(i);
-        b.debug_wire(w);
-    }
+    // for (i, w) in (k0..k1).enumerate() {
+    //     b.debug(i);
+    //     b.debug_wire(w);
+    // }
 
     // Fetch instruction
     let pc = k0 + usize::from(PC);
@@ -537,6 +537,7 @@ mod test {
 
     use crate::miniram::lang::Prog;
     use crate::miniram::lang::Word;
+    use crate::miniram::programs;
     use crate::miniram::programs::*;
 
     use super::{encode_witness, generate_circuit};
@@ -581,6 +582,15 @@ mod test {
         let prog = &b_skip();
         let args = vec![];
         let time_bound = 3; // notice: t < len(encode(prog))
+        let res = convert_and_eval(prog, args, time_bound);
+        assert_eq!(vec![0; res.len()], res);
+    }
+
+    #[test]
+    fn overflowing_add() {
+        let prog = &programs::overflowing_add();
+        let args = vec![];
+        let time_bound = 3;
         let res = convert_and_eval(prog, args, time_bound);
         assert_eq!(vec![0; res.len()], res);
     }

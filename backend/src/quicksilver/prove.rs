@@ -17,6 +17,7 @@ pub fn prove32(c: Circuit<u32>, w: Vec<u32>, mut chan: ProverTcpChannel, mut ctx
         || (n_select_const > 0)
         || (n_decode32 > 0)
         || (n_check_all_eq_but_one > 0);
+    let n_openings = c.n_out + c.n_decode32;
 
     #[rustfmt::skip]
     let segments = &vole::Segments {
@@ -27,6 +28,7 @@ pub fn prove32(c: Circuit<u32>, w: Vec<u32>, mut chan: ProverTcpChannel, mut ctx
             + n_decode32 * 32
             + n_check_all_eq_but_one,
         n_mul_check: if check_mul { 1 } else { 0 },
+        n_openings
     };
 
     ctx.start_time("preprocess vole");
@@ -71,10 +73,17 @@ pub fn prove32(c: Circuit<u32>, w: Vec<u32>, mut chan: ProverTcpChannel, mut ctx
     }
 
     ctx.start_time("sending opening of outputs.");
-    for (val, mac) in outputs {
+    for (i, (x, tx)) in outputs.iter().enumerate() {
         // Assert that prover is honest
-        assert_eq!(val, 0);
-        chan.send_mac(mac);
+        assert_eq!(x % (1 << 32), 0);
+        // Mask upper 96 bits of x by opening x + r * 2^32
+        let r = voles.xs_openings[i];
+        let tr = voles.mc_openings[i];
+        let z = x.wrapping_add(r.wrapping_mul(1 << 32));
+        let tz = tx.wrapping_add(tr.wrapping_mul(1 << 32));
+
+        chan.send_val(z);
+        chan.send_mac(tz);
     }
     ctx.stop_time();
 
@@ -93,26 +102,51 @@ fn compute_a0a1(x: u128, mult_checks: Vec<A0A1>) -> (u128, u128) {
 }
 
 fn preprocess_vole(chan: &mut ProverTcpChannel, segs: &vole::Segments) -> vole::CorrSender {
+    let verbose = false;
     let n = segs.size().try_into().unwrap();
 
-    //println!("Sending extend VOLE n={n}");
+    if verbose {
+        println!("Sending extend VOLE n={n}")
+    };
     chan.send_extend_vole_zm(n);
 
     let (xs_in, mc_in) = chan.recv_extend_vole_zm(segs.n_in);
-    // println!("  Correlations for witness:");
-    // println!("  Received xs={xs_in:?}, macs={mc_in:?}");
+    if verbose {
+        println!("  Correlations for witness:")
+    };
+    if verbose {
+        println!("  Received xs={xs_in:?}, macs={mc_in:?}")
+    };
+
+    let (xs_openings, mc_openings) = chan.recv_extend_vole_zm(segs.n_openings);
+    if verbose {
+        println!("  Correlations for openings:")
+    };
+    if verbose {
+        println!("  Received xs={xs_openings:?}, macs={mc_openings:?}")
+    };
 
     let (xs_mul, mc_mul) = chan.recv_extend_vole_zm(segs.n_mul);
-    // println!("  Correlations for multiplications:");
-    // println!("  Received xs={xs_mul:?}, macs={mc_mul:?}");
+    if verbose {
+        println!("  Correlations for multiplications:")
+    };
+    if verbose {
+        println!("  Received xs={xs_mul:?}, macs={mc_mul:?}")
+    };
 
     let (xs_mul_check, mc_mul_check) = chan.recv_extend_vole_zm(segs.n_mul_check);
-    // println!("  Correlations for multiplication checks:");
-    // println!("  Received xs={xs_mul_check:?}, macs={mc_mul_check:?}");
+    if verbose {
+        println!("  Correlations for multiplication checks:")
+    };
+    if verbose {
+        println!("  Received xs={xs_mul_check:?}, macs={mc_mul_check:?}")
+    };
 
     vole::CorrSender {
         xs_in,
         mc_in,
+        xs_openings,
+        mc_openings,
         xs_mul,
         mc_mul,
         xs_mul_check,
@@ -365,41 +399,46 @@ fn eval(
                 openings.push(bst);
             }
             OP_DECODE32 => {
-                // args: x where x < 2^32
-                // outw: idx1, idx2, ..., idxn s.t sum 2^{i-1}*xi
-                let mut x = wires.clear[gates[i] - ARG0];
-                let xt = wires.macs[gates[i] - ARG0];
-                u32::try_from(x).unwrap();
+                // args: x' where x' < 2^128
+                // outw: idx1, idx2, ..., idxn s.t x = sum 2^{i-1}*xi
+                //       where x = x' mod 2^32
+                let mut x_ = wires.clear[gates[i] - ARG0];
+                let x_init = wires.clear[gates[i] - ARG0];
+                let x = x_ % (1 << 32);
+                let tx_ = wires.macs[gates[i] - ARG0];
+                let mut tsum: u128 = 0;
                 let mut sum: u128 = 0;
                 for i in 0..32 {
-                    let xi = u128::from(x.trailing_ones() > 0);
+                    let xi = u128::from(x_.trailing_ones() > 0);
                     // Commit to xi
-                    let xit = mc_mul[t];
+                    let txi = mc_mul[t];
                     // Send delta
                     let d = xi.wrapping_sub(xs_mul[t]);
                     chan.send_delta(d);
                     // Prove xi(1-xi) opens to 0
-                    let a0 = xit.wrapping_mul(zero.wrapping_sub(xit));
-                    let a1 = xit
+                    let a0 = txi.wrapping_mul(zero.wrapping_sub(txi));
+                    let a1 = txi
                         .wrapping_mul(one.wrapping_sub(xi))
-                        .wrapping_add(zero.wrapping_sub(xit).wrapping_mul(xi));
+                        .wrapping_add(zero.wrapping_sub(txi).wrapping_mul(xi));
                     a0a1.push((a0, a1));
 
-                    sum = sum.wrapping_add(two.pow(i).wrapping_mul(xit));
+                    tsum = tsum.wrapping_add(two.pow(i).wrapping_mul(txi));
+                    sum = sum.wrapping_add(two.pow(i).wrapping_mul(xi));
 
                     if i != 31 {
                         wires.clear.push(xi);
-                        wires.macs.push(xit);
-                        x >>= 1;
+                        wires.macs.push(txi);
+                        x_ >>= 1;
                         t += 1;
                     } else {
                         res_x = xi;
-                        res_t = xit;
+                        res_t = txi;
                         t += 1;
                     }
                 }
                 // Prove pow sum opens to x
-                openings.push(sum.wrapping_sub(xt));
+                out.push((x_init.wrapping_sub(sum), tx_.wrapping_sub(tsum)));
+                //openings.push(sum.wrapping_sub(tx_));
                 i += 1;
             }
             OP_ENCODE4 => {

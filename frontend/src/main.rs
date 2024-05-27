@@ -90,6 +90,11 @@ fn main() {
                                     let args = vec![];
                                     (prog, args)
                                 }
+                                "overflowing_add" => {
+                                    let prog = programs::overflowing_add();
+                                    let args = vec![];
+                                    (prog, args)
+                                }
                                 "verify_compress" => {
                                     let arg = arg.unwrap();
                                     let mut arg = arg.split(',');
@@ -180,13 +185,30 @@ fn main() {
                                     let w = vec![1, 43, 43, 2, 3];
                                     (c, w)
                                 }
+                                "decode32_128_bit" => {
+                                    let c = circuits::add_decode32();
+                                    let w = vec![1 << 31, 1 << 31];
+                                    (c, w)
+                                }
+                                "add" => {
+                                    let arg = arg.unwrap();
+                                    let mut arg = arg.split(',');
+                                    let x = arg.next().unwrap().parse::<u32>().unwrap();
+                                    let y = arg.next().unwrap().parse::<u32>().unwrap();
+                                    let c = circuits::add();
+                                    let w = vec![x, y];
+                                    (c, w)
+                                }
                                 _ => {
                                     println!("don't understand: {}", circuit);
                                     exit(1);
                                 }
                             }
                         } else {
-                            println!("err: no prog and time-bound or curcuit ");
+                            println!(
+                                "err: want a) prog and
+                                time-bound or b) circuit "
+                            );
                             exit(1);
                         };
                         match party.as_ref() {

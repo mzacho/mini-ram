@@ -285,6 +285,14 @@ pub fn b_skip() -> Prog {
         .build()
 }
 
+pub fn overflowing_add() -> Prog {
+    Builder::new()
+        .mov_c(1, 1 << 31)
+        .add(1, 1, 1)
+        .ret_r(1)
+        .build()
+}
+
 /// MOV r2, 4
 /// MOV r4, 0      <-- sets Z
 /// B Z r2         <-- skips next instr

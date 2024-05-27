@@ -8,6 +8,7 @@ pub fn verify32(c: Circuit<u32>, mut chan: VerifierTcpChannel, mut ctx: ProofCtx
     //let n_in = w.len();
     let n_gates = c.n_gates;
     let n_in = c.n_in;
+    let n_openings = c.n_out + c.n_decode32;
     let n_mul = c.n_mul;
     let n_select = c.n_select;
     let n_select_const = c.n_select_const;
@@ -28,6 +29,7 @@ pub fn verify32(c: Circuit<u32>, mut chan: VerifierTcpChannel, mut ctx: ProofCtx
             + n_decode32 * 32
             + n_check_all_eq_but_one,
         n_mul_check: if check_mul { 1 } else { 0 },
+        n_openings,
     };
 
     ctx.start_time("preprocess vole");
@@ -77,9 +79,18 @@ pub fn verify32(c: Circuit<u32>, mut chan: VerifierTcpChannel, mut ctx: ProofCtx
 
     println!("Receiving openings (macs) of {n} output values.");
     ctx.start_time("openings");
-    for key in keys {
-        let mac = chan.recv_mac();
-        assert_eq!(mac, key);
+    for (i, kx) in keys.into_iter().enumerate() {
+        let z = chan.recv_val();
+        let tz = chan.recv_mac();
+        let kr = vole.ks_openings[i];
+
+        assert_eq!(
+            tz,
+            delta
+                .wrapping_mul(z)
+                .wrapping_add(kx)
+                .wrapping_add(kr.wrapping_mul(1 << 32))
+        );
     }
     ctx.stop_time();
 
@@ -290,9 +301,8 @@ fn eval(
                         t += 1;
                     }
                 }
-                // Verify sum - x opens to 0
-                let mac = chan.recv_mac();
-                assert_eq!(mac, sum.wrapping_sub(kx));
+                // Verify x - sum opens to 0
+                outputs.push(kx.wrapping_sub(sum));
                 i += 1;
             }
             OP_DECODE64 => {
@@ -449,20 +459,34 @@ fn preprocess_vole(
     chan: &mut VerifierTcpChannel,
     segs: &vole::Segments,
 ) -> (u128, vole::CorrReceiver) {
+    let verbose = false;
     let delta = chan.recv_delta_from_dealer();
-    //println!("Received delta={delta}");
+    if verbose {
+        println!("Received delta={delta}")
+    };
 
     let ks_in = chan.recv_extend_vole_zm(segs.n_in);
-    //println!("  Received ks_in={ks_in:?}");
+    if verbose {
+        println!("  Received ks_in={ks_in:?}")
+    };
+    let ks_openings = chan.recv_extend_vole_zm(segs.n_openings);
+    if verbose {
+        println!("  Received ks_out={ks_openings:?}")
+    };
     let ks_mul = chan.recv_extend_vole_zm(segs.n_mul);
-    //println!("  Received ks_mul={ks_mul:?}");
+    if verbose {
+        println!("  Received ks_mul={ks_mul:?}")
+    };
     let ks_mul_check = chan.recv_extend_vole_zm(segs.n_mul_check);
-    //println!("  Received ks_mul_check={ks_mul_check:?}");
+    if verbose {
+        println!("  Received ks_mul_check={ks_mul_check:?}")
+    };
 
     (
         delta,
         vole::CorrReceiver {
             ks_in,
+            ks_openings,
             ks_mul,
             ks_mul_check,
         },

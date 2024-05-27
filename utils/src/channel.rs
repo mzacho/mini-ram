@@ -12,6 +12,7 @@ pub struct ProverTcpChannel {
     stream_other: TcpStream,
     delta_ctr: usize,
     mac_ctr: usize,
+    val_ctr: usize,
     verbose: bool,
 }
 
@@ -20,6 +21,7 @@ pub struct VerifierTcpChannel {
     stream_other: TcpStream,
     delta_ctr: usize,
     mac_ctr: usize,
+    val_ctr: usize,
     verbose: bool,
 }
 
@@ -30,6 +32,7 @@ impl ProverTcpChannel {
             stream_vole: sv,
             delta_ctr: 0,
             mac_ctr: 0,
+            val_ctr: 0,
             verbose: DEBUG,
         }
     }
@@ -49,6 +52,9 @@ impl ProverTcpChannel {
     pub fn recv_extend_vole_zm(&mut self, n: usize) -> (Vec<u128>, Vec<u128>) {
         let mut xs = vec![];
         let mut macs = vec![];
+        if n == 0 {
+            return (xs, macs);
+        }
 
         // Read in chunks of 32 u128's at a time
         for _ in 0..(n / 32) + 1 {
@@ -86,6 +92,16 @@ impl ProverTcpChannel {
         self.mac_ctr += 1;
     }
 
+    pub fn send_val(&mut self, val: u128) {
+        let ctr = self.val_ctr;
+        if self.verbose {
+            println!("  [chan] Sending val{ctr}={val}")
+        };
+        let n = self.stream_other.write(&val.to_le_bytes()).unwrap();
+        assert_eq!(n, std::mem::size_of::<u128>());
+        self.val_ctr += 1;
+    }
+
     pub fn recv_challenge(&mut self) -> u128 {
         let x = recv_u128(&mut self.stream_other);
         if self.verbose {
@@ -118,6 +134,7 @@ impl VerifierTcpChannel {
             stream_vole: sv,
             delta_ctr: 0,
             mac_ctr: 0,
+            val_ctr: 0,
             verbose: DEBUG,
         }
     }
@@ -134,6 +151,9 @@ impl VerifierTcpChannel {
 
     pub fn recv_extend_vole_zm(&mut self, n: usize) -> Vec<u128> {
         let mut keys = vec![];
+        if n == 0 {
+            return keys;
+        }
 
         // Read in chunks of 32 u128's at a time
         for _ in 0..(n / 32) + 1 {
@@ -163,6 +183,16 @@ impl VerifierTcpChannel {
             println!("  [chan] Received mac{ctr}={x}")
         };
         self.mac_ctr += 1;
+        x
+    }
+
+    pub fn recv_val(&mut self) -> u128 {
+        let x = recv_u128(&mut self.stream_other);
+        let ctr = self.val_ctr;
+        if self.verbose {
+            println!("  [chan] Received val{ctr}={x}")
+        };
+        self.val_ctr += 1;
         x
     }
 

@@ -60,6 +60,16 @@ pub fn add_eq_42() -> Circuit<u32> {
     b.build(&[sub])
 }
 
+/// A circuit that computes x + y
+pub fn add() -> Circuit<u32> {
+    let n_in = 2;
+    let x = ARG0;
+    let y = ARG0 + 1;
+    let mut b = Builder::new(n_in);
+    let add = b.add(&[x, y]);
+    b.build(&[add])
+}
+
 /// A circuit that computes x + y - z
 pub fn add_eq() -> Circuit<u32> {
     let n_in = 3;
@@ -156,6 +166,20 @@ pub fn decode32() -> Circuit<u32> {
     b.build(&(x0..x0 + 32).collect::<Vec<_>>())
 }
 
+/// A circuit that computes decode32(add(x, y)) with x and y 128
+/// bits
+pub fn add_decode32() -> Circuit<u32> {
+    let n_in = 2;
+    let x = ARG0;
+    let y = ARG0 + 1;
+    let mut b = Builder::new(n_in);
+    let add = b.add(&[x, y]);
+    let add = b.add(&[add]);
+    let add = b.add(&[add]);
+    let z0 = b.decode32(add);
+    b.build(&(z0..z0 + 32).collect::<Vec<_>>())
+}
+
 // /// A circuit that computes decode64(x),
 // /// which outputs 00...0 only if x is 0.
 // pub fn decode64() -> Circuit<u64> {
@@ -232,7 +256,7 @@ mod test {
         let y = ARG0 + 1;
         let mut b = Builder::new(n_in);
         let mul = b.mul(x, y);
-        let dbg = b.debug_wire(mul);
+        let _dbg = b.debug_wire(mul);
         let c = &b.build(&[mul]);
         let w = vec![3, 5];
         assert_eq!(*eval32(c, w).last().unwrap(), 15)
