@@ -634,6 +634,8 @@ mod tests {
             n_mul: 0,
             n_select: 0,
             n_select_const: 0,
+            n_select_alt: 0,
+            n_select_const_alt: 0,
             n_decode32: 0,
             n_check_all_eq_but_one: 0,
         };
@@ -660,6 +662,8 @@ mod tests {
             n_mul: 0,
             n_select: 0,
             n_select_const: 0,
+            n_select_alt: 0,
+            n_select_const_alt: 0,
             n_decode32: 0,
             n_check_all_eq_but_one: 0,
         };

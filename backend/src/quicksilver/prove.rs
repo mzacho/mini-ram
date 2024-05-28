@@ -6,29 +6,25 @@ use utils::channel::*;
 use crate::ProofCtx;
 
 pub fn prove32(c: Circuit<u32>, w: Vec<u32>, mut chan: ProverTcpChannel, mut ctx: ProofCtx) {
-    let n_in = w.len();
-    let n_mul = c.n_mul;
-    let n_select = c.n_select;
-    let n_select_const = c.n_select_const;
-    let n_decode32 = c.n_decode32;
-    let n_check_all_eq_but_one = c.n_check_all_eq_but_one;
-    let check_mul = (n_mul > 0)
-        || (n_select > 0)
-        || (n_select_const > 0)
-        || (n_decode32 > 0)
-        || (n_check_all_eq_but_one > 0);
+    let check_mul = (c.n_mul > 0)
+        || (c.n_select_alt > 0)
+        || (c.n_select_const_alt > 0)
+        || (c.n_decode32 > 0)
+        || (c.n_check_all_eq_but_one > 0);
     let n_openings = c.n_out + c.n_decode32;
 
     #[rustfmt::skip]
     let segments = &vole::Segments {
-        n_in,
-        n_mul: n_mul
-            + n_select * 2
-            + n_select_const
-            + n_decode32 * 32
-            + n_check_all_eq_but_one,
+        n_in: w.len(),
+        n_mul: c.n_mul
+            + c.n_select_alt * 2
+            + c.n_select_const_alt
+            + c.n_decode32 * 32
+            + c.n_check_all_eq_but_one,
         n_mul_check: if check_mul { 1 } else { 0 },
-        n_openings
+        n_openings: c.n_out
+            + c.n_decode32
+            + c.n_select
     };
 
     ctx.start_time("preprocess vole");
@@ -303,11 +299,13 @@ fn eval(
                 res_x = wires.clear[gates[i + iu] - ARG0];
                 res_t = 0;
                 let mut bst: u128 = 0;
+                let mut bs: u128 = 0;
                 let mut j = 0;
                 while gates[i] >= ARG0 {
                     let xj = wires.clear[gates[i] - ARG0];
                     let xjt = wires.macs[gates[i] - ARG0];
                     let bj: u128 = if iu == 0 { 1 } else { 0 };
+                    bs = bs.wrapping_add(bj);
 
                     // Commit to bj
                     let bjt = mc_mul[t];
@@ -349,7 +347,7 @@ fn eval(
                     }
                 }
                 // Prove that sum of bs opens to 1
-                openings.push(bst);
+                out.push((bs.wrapping_sub(1), bst));
             }
             OP_SELECT_CONST => {
                 // args: idi, idc1, idc2, ..., idcn where i <= n

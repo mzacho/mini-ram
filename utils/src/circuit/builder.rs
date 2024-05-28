@@ -32,7 +32,9 @@ pub struct Builder<T> {
     n_mul: usize,
     n_out: usize,
     n_select: usize,
+    n_select_alt: usize,
     n_select_const: usize,
+    n_select_const_alt: usize,
     n_decode32: usize,
     n_check_all_eq_but_one: usize,
     offset_arg0: bool,
@@ -51,10 +53,14 @@ pub struct Res<T> {
     pub n_mul: usize,
     /// Number of output gates
     pub n_out: usize,
-    /// Number of select alternatives
+    /// Number of select gates
     pub n_select: usize,
-    /// Number of select_const alternatives
+    /// Number of select alternatives
+    pub n_select_alt: usize,
+    /// Number of select_const gates
     pub n_select_const: usize,
+    /// Number of select_const alternatives
+    pub n_select_const_alt: usize,
     /// Number of decode32 gates
     pub n_decode32: usize,
     /// Number of check_all_eq_but_one pairs
@@ -74,6 +80,8 @@ impl<T> Builder<T> {
             n_out: 0,
             n_select: 0,
             n_select_const: 0,
+            n_select_alt: 0,
+            n_select_const_alt: 0,
             n_decode32: 0,
             n_check_all_eq_but_one: 0,
             offset_arg0: false,
@@ -209,9 +217,10 @@ impl<T> Builder<T> {
         self.gates.push(i);
         for id in ids {
             self.gates.push(*id);
-            self.n_select += 1;
+            self.n_select_alt += 1;
         }
         self.n_gates += 1;
+        self.n_select += 1;
         self.cursor_wires += 1;
         self.cursor_wires - 1
     }
@@ -249,10 +258,15 @@ impl<T> Builder<T> {
         for id in (from..to).step_by(step) {
             self.gates.push(id);
             if matches!(op, OP_SELECT) {
-                self.n_select += 1;
+                self.n_select_alt += 1;
             } else {
-                self.n_select_const += 1;
+                self.n_select_const_alt += 1;
             }
+        }
+        if matches!(op, OP_SELECT) {
+            self.n_select += 1;
+        } else {
+            self.n_select_const += 1;
         }
         self.n_gates += 1;
         self.cursor_wires += 1;
@@ -449,6 +463,8 @@ impl<T> Builder<T> {
             n_mul: self.n_mul,
             n_select: self.n_select,
             n_select_const: self.n_select_const,
+            n_select_alt: self.n_select_alt,
+            n_select_const_alt: self.n_select_const_alt,
             n_decode32: self.n_decode32,
             n_check_all_eq_but_one: self.n_check_all_eq_but_one,
         }
