@@ -10,7 +10,7 @@ pub fn prove32(c: Circuit<u32>, w: Vec<u32>, mut chan: ProverTcpChannel, mut ctx
         || (c.n_select_alt > 0)
         || (c.n_select_const_alt > 0)
         || (c.n_decode32 > 0)
-        || (c.n_check_all_eq_but_one > 0);
+        || (c.n_check_all_eq_pairs > 0);
     let n_openings = c.n_out + c.n_decode32;
 
     #[rustfmt::skip]
@@ -20,12 +20,13 @@ pub fn prove32(c: Circuit<u32>, w: Vec<u32>, mut chan: ProverTcpChannel, mut ctx
             + c.n_select_alt * 2
             + c.n_select_const_alt
             + c.n_decode32 * 32
-            + c.n_check_all_eq_but_one,
+            + c.n_check_all_eq_pairs,
         n_mul_check: if check_mul { 1 } else { 0 },
         n_openings: c.n_out
             + c.n_decode32
             + c.n_select
             + c.n_select_const
+            + c.n_check_all_eq
     };
 
     ctx.start_time("preprocess vole");
@@ -44,13 +45,7 @@ pub fn prove32(c: Circuit<u32>, w: Vec<u32>, mut chan: ProverTcpChannel, mut ctx
         macs: voles.mc_in,
     };
     ctx.start_time("evaluating circuit");
-    let (outputs, mult_checks, openings) = eval(&c, wires, voles.xs_mul, voles.mc_mul, &mut chan);
-    ctx.stop_time();
-
-    ctx.start_time("opening outputs");
-    for mac in openings {
-        chan.send_mac(mac)
-    }
+    let (outputs, mult_checks) = eval(&c, wires, voles.xs_mul, voles.mc_mul, &mut chan);
     ctx.stop_time();
 
     if check_mul {
@@ -69,7 +64,7 @@ pub fn prove32(c: Circuit<u32>, w: Vec<u32>, mut chan: ProverTcpChannel, mut ctx
         chan.send_v(v);
     }
 
-    ctx.start_time("sending opening of outputs.");
+    ctx.start_time("sending openings");
     for (i, (x, tx)) in outputs.iter().enumerate() {
         // Assert that prover is honest
         assert_eq!(x % (1 << 32), 0);
@@ -169,7 +164,7 @@ fn eval(
     xs_mul: Vec<u128>,
     mc_mul: Vec<u128>,
     chan: &mut ProverTcpChannel,
-) -> (Vec<ValWithMac>, Vec<A0A1>, Vec<u128>) {
+) -> (Vec<ValWithMac>, Vec<A0A1>) {
     let gates = &c.gates;
     let consts = &c.consts;
     let n_gates = c.n_gates;
@@ -186,7 +181,6 @@ fn eval(
 
     let mut out = vec![];
     let mut a0a1 = vec![];
-    let mut openings = vec![];
 
     let mut i = 0; // ctr gate
     let mut t = 0; // ctr mul
@@ -439,7 +433,6 @@ fn eval(
                 }
                 // Prove pow sum opens to x
                 out.push((x_init.wrapping_sub(sum), tx_.wrapping_sub(tsum)));
-                //openings.push(sum.wrapping_sub(tx_));
                 i += 1;
             }
             OP_ENCODE4 => {
@@ -555,6 +548,7 @@ fn eval(
                 let mut iu: usize = i_.try_into().ok().unwrap();
                 i += 1;
                 let mut j = 0;
+                let mut tsum: u128 = 0;
                 let mut sum: u128 = 0;
                 while gates[i] >= ARG0 {
                     let bj: u128 = if iu == 0 { 0 } else { 1 };
@@ -562,6 +556,7 @@ fn eval(
                     let yj = wires.clear[gates[i + 1] - ARG0];
                     let xjt = wires.macs[gates[i] - ARG0];
                     let yjt = wires.macs[gates[i + 1] - ARG0];
+                    sum = sum.wrapping_add(bj);
 
                     // Commit to bj
                     let bjt = mc_mul[t];
@@ -569,7 +564,7 @@ fn eval(
                     let r = xs_mul[t];
                     let d = bj.wrapping_sub(xs_mul[t]);
                     chan.send_delta(d);
-                    sum = sum.wrapping_add(bjt);
+                    tsum = tsum.wrapping_add(bjt);
 
                     // Prove (bj-1)*(i-j) opens to 0
                     let a0 = bjt.wrapping_mul(it);
@@ -594,7 +589,7 @@ fn eval(
                     }
                 }
                 // Prove that sum{j=1,..,n} bj = n-1
-                openings.push(sum)
+                out.push((sum.wrapping_sub(j - 1), tsum));
             }
             OP_DEBUG => {
                 let msg = gates[i] - ARG0;
@@ -616,7 +611,7 @@ fn eval(
         // dbg!(&wires);
     }
     //pp::print(c, Some(&clr_w));
-    (out, a0a1, openings)
+    (out, a0a1)
 }
 
 /// Counts number of gates

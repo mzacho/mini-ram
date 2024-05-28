@@ -9,7 +9,7 @@ pub fn verify32(c: Circuit<u32>, mut chan: VerifierTcpChannel, mut ctx: ProofCtx
         || (c.n_select_alt > 0)
         || (c.n_select_const_alt > 0)
         || (c.n_decode32 > 0)
-        || (c.n_check_all_eq_but_one > 0);
+        || (c.n_check_all_eq_pairs > 0);
     let n_openings = c.n_out + c.n_decode32;
 
     #[rustfmt::skip]
@@ -19,12 +19,13 @@ pub fn verify32(c: Circuit<u32>, mut chan: VerifierTcpChannel, mut ctx: ProofCtx
             + c.n_select_alt * 2
             + c.n_select_const_alt
             + c.n_decode32 * 32
-            + c.n_check_all_eq_but_one,
+            + c.n_check_all_eq_pairs,
         n_mul_check: if check_mul { 1 } else { 0 },
         n_openings: c.n_out
             + c.n_decode32
             + c.n_select
             + c.n_select_const
+            + c.n_check_all_eq
     };
 
     ctx.start_time("preprocess vole");
@@ -424,8 +425,7 @@ fn eval(
                     }
                 }
                 // Verify sum - n-1 opens to 0
-                let mac = chan.recv_mac();
-                assert_eq!(mac, sum.wrapping_add(delta.wrapping_mul(j - 1)));
+                outputs.push(sum.wrapping_add(delta.wrapping_mul(j - 1)));
             }
             OP_DEBUG => {
                 let msg = gates[i] - ARG0;

@@ -271,7 +271,7 @@ fn print_circuit_stats<T>(c: &Circuit<T>) {
     let n_gates = c.gates.len();
     let n_select = c.n_select_alt;
     let n_decode32 = c.n_decode32;
-    let n_check_all = c.n_check_all_eq_but_one;
+    let n_check_all = c.n_check_all_eq_pairs;
     let n_consts = c.consts.len();
     let n_out = c.n_out;
     println!("Circuit ====================================");

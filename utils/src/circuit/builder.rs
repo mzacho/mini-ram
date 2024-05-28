@@ -36,7 +36,8 @@ pub struct Builder<T> {
     n_select_const: usize,
     n_select_const_alt: usize,
     n_decode32: usize,
-    n_check_all_eq_but_one: usize,
+    n_check_all_eq: usize,
+    n_check_all_eq_pairs: usize,
     offset_arg0: bool,
     enable_z2_ops: bool,
 }
@@ -63,8 +64,10 @@ pub struct Res<T> {
     pub n_select_const_alt: usize,
     /// Number of decode32 gates
     pub n_decode32: usize,
+    /// Number of check_all_eq_but_one gates
+    pub n_check_all_eq: usize,
     /// Number of check_all_eq_but_one pairs
-    pub n_check_all_eq_but_one: usize,
+    pub n_check_all_eq_pairs: usize,
 }
 
 impl<T> Builder<T> {
@@ -83,7 +86,8 @@ impl<T> Builder<T> {
             n_select_alt: 0,
             n_select_const_alt: 0,
             n_decode32: 0,
-            n_check_all_eq_but_one: 0,
+            n_check_all_eq: 0,
+            n_check_all_eq_pairs: 0,
             offset_arg0: false,
             enable_z2_ops: false,
         }
@@ -418,7 +422,8 @@ impl<T> Builder<T> {
             self.gates.push(*y);
         }
         self.n_gates += 1;
-        self.n_check_all_eq_but_one += ids.len()
+        self.n_check_all_eq += 1;
+        self.n_check_all_eq_pairs += ids.len()
     }
 
     /// Put builder into state where all ids are offset by ARG0, but
@@ -466,7 +471,8 @@ impl<T> Builder<T> {
             n_select_alt: self.n_select_alt,
             n_select_const_alt: self.n_select_const_alt,
             n_decode32: self.n_decode32,
-            n_check_all_eq_but_one: self.n_check_all_eq_but_one,
+            n_check_all_eq: self.n_check_all_eq,
+            n_check_all_eq_pairs: self.n_check_all_eq_pairs,
         }
     }
 
