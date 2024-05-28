@@ -24,6 +24,7 @@ pub fn verify32(c: Circuit<u32>, mut chan: VerifierTcpChannel, mut ctx: ProofCtx
         n_openings: c.n_out
             + c.n_decode32
             + c.n_select
+            + c.n_select_const
     };
 
     ctx.start_time("preprocess vole");
@@ -236,7 +237,6 @@ fn eval(
                     }
                 }
                 // Assert that sum bjs opens to 1
-
                 outputs.push(kbs.wrapping_add(delta))
             }
             OP_SELECT_CONST => {
@@ -268,9 +268,8 @@ fn eval(
                         break;
                     }
                 }
-                // Receive mac of sum bj, assert that it opens to 1
-                let mac = chan.recv_mac();
-                assert_eq!(mac, kbs.wrapping_add(delta));
+                // Assert that sum bjs opens to 1
+                outputs.push(kbs.wrapping_add(delta))
             }
             OP_DECODE32 => {
                 // args: x where x < 2^32

@@ -25,6 +25,7 @@ pub fn prove32(c: Circuit<u32>, w: Vec<u32>, mut chan: ProverTcpChannel, mut ctx
         n_openings: c.n_out
             + c.n_decode32
             + c.n_select
+            + c.n_select_const
     };
 
     ctx.start_time("preprocess vole");
@@ -359,11 +360,13 @@ fn eval(
                 res_x = consts[gates[i + iu] - ARG0] as u128;
                 res_t = 0;
                 let mut bst: u128 = 0;
+                let mut bs: u128 = 0;
                 let mut j = 0;
                 while gates[i] >= ARG0 {
                     let cj = consts[gates[i] - ARG0];
                     let cjt = 0;
                     let bj: u128 = if iu == 0 { 1 } else { 0 };
+                    bs = bs.wrapping_add(bj);
 
                     // Commit to bj
                     let bjt = mc_mul[t];
@@ -394,7 +397,7 @@ fn eval(
                     }
                 }
                 // Prove that sum of bs opens to 1
-                openings.push(bst);
+                out.push((bs.wrapping_sub(1), bst));
             }
             OP_DECODE32 => {
                 // args: x' where x' < 2^128
