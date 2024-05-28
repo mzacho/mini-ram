@@ -77,7 +77,7 @@ pub fn run_vole(port: u16, mut ctx: ProofCtx) -> std::io::Result<()> {
     let one_tenth_done = (n / 32) / 10;
     let mut ctr = 0;
     ctx.start_time("vole");
-    for i in 0..(n / 32) + 3 {
+    for i in 0..(n / 32) + 4 {
         if (one_tenth_done != 0) && i % one_tenth_done == 0 {
             println!("  [progress] {ctr}%");
             ctr += 10;

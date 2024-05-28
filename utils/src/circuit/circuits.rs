@@ -166,16 +166,14 @@ pub fn decode32() -> Circuit<u32> {
     b.build(&(x0..x0 + 32).collect::<Vec<_>>())
 }
 
-/// A circuit that computes decode32(add(x, y)) with x and y 128
-/// bits
+/// A circuit that computes decode32(add(add(x, y), add(x, y)))
 pub fn add_decode32() -> Circuit<u32> {
     let n_in = 2;
     let x = ARG0;
     let y = ARG0 + 1;
     let mut b = Builder::new(n_in);
     let add = b.add(&[x, y]);
-    let add = b.add(&[add]);
-    let add = b.add(&[add]);
+    let add = b.add(&[add, add]);
     let z0 = b.decode32(add);
     b.build(&(z0..z0 + 32).collect::<Vec<_>>())
 }
