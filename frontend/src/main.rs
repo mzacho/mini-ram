@@ -24,6 +24,8 @@ use utils::circuit::builder::Res as Circuit;
 use utils::circuit::circuits;
 
 use crate::miniram::interpreter::interpret;
+use crate::miniram::lang::Prog;
+use crate::miniram::lang::Word;
 use crate::miniram::programs;
 use crate::miniram::programs::compress;
 use crate::miniram::programs::verify_compress;
@@ -56,7 +58,7 @@ fn main() {
             println!("Successfully parsed args");
 
             if let Some(party) = party {
-                let deterministic = true;
+                let deterministic = false;
                 let mut ctx = if deterministic {
                     ProofCtx::new_deterministic()
                 } else {
@@ -64,161 +66,48 @@ fn main() {
                 };
 
                 match party.as_str() {
-                    "prover" | "verifier" => {
+                    "prover" => {
                         assert!(port_vole.is_some());
                         let (c, w) = if prog.is_some() & t.is_some() {
                             let prog = prog.unwrap();
+                            let arg = arg.unwrap();
                             let t = t.unwrap();
-                            let (prog, args) = match prog.as_str() {
-                                "mul_eq" => {
-                                    let prog = programs::mul_eq();
-                                    let args = vec![2, 2, 4];
-                                    (prog, args)
-                                }
-                                "const0" => {
-                                    let prog = programs::const_0();
-                                    let args = vec![];
-                                    (prog, args)
-                                }
-                                "shr" => {
-                                    let prog = programs::shr();
-                                    let args = vec![];
-                                    (prog, args)
-                                }
-                                "rotr" => {
-                                    let prog = programs::rotr();
-                                    let args = vec![];
-                                    (prog, args)
-                                }
-                                "overflowing_add" => {
-                                    let prog = programs::overflowing_add();
-                                    let args = vec![];
-                                    (prog, args)
-                                }
-                                "verify_compress" => {
-                                    let arg = arg.unwrap();
-                                    let mut arg = arg.split(',');
-                                    let msg = arg.next().unwrap();
-                                    let mac = arg.next().unwrap();
-                                    let msg_ = sha256::pad(msg);
-                                    let mac_ = sha256::parse_mac(mac);
-                                    let prog = programs::verify_compress(mac_);
-                                    (prog, Vec::from(msg_))
-                                }
-
-                                _ => {
-                                    println!("don't understand: {}", prog);
-                                    exit(1);
-                                }
-                            };
+                            let (prog, args) =
+                                test_prog(prog.as_str(), arg.as_str(), party.as_str());
                             ctx.start_time("encode witness");
-                            let w = encode_witness(&prog, args, t, &mut ctx).unwrap(); // todo: handle
+                            let w = encode_witness(&prog, args, t, &mut ctx).unwrap(); // todo: handle?
                             ctx.stop_time();
                             ctx.start_time("generate circuit");
                             let c = generate_circuit(&prog, t);
                             ctx.stop_time();
                             (c, w)
                         } else if let Some(circuit) = circuit {
-                            match circuit.as_str() {
-                                "add_eq_42" => {
-                                    let c = circuits::add_eq_42();
-                                    let w = vec![21, 21];
-                                    (c, w)
-                                }
-                                "add_eq" => {
-                                    let c = circuits::add_eq();
-                                    let w = vec![21, 21, 42];
-                                    (c, w)
-                                }
-                                "mul_eq" => {
-                                    let c = circuits::mul_eq();
-                                    let w = vec![2, 2, 4];
-                                    (c, w)
-                                }
-                                "mul_const" => {
-                                    let c = circuits::mul_const();
-                                    let w = vec![42, 42 * 42];
-                                    (c, w)
-                                }
-                                "mul_mul_eq" => {
-                                    let c = circuits::mul_mul_eq();
-                                    let w = vec![2, 2, 7, 28];
-                                    (c, w)
-                                }
-                                "pow_eq" => {
-                                    let c = circuits::pow();
-                                    let w = vec![2, 3, 8];
-                                    (c, w)
-                                }
-                                "select_eq" => {
-                                    let c = circuits::select_eq();
-                                    let w = vec![0, 0, 1];
-                                    (c, w)
-                                }
-                                "select_eq2" => {
-                                    let c = circuits::select_eq2();
-                                    let w = vec![2, 1337, 1, 0, 42];
-                                    (c, w)
-                                }
-                                "select_const" => {
-                                    let c = circuits::select_const(0, 1);
-                                    let w = vec![0];
-                                    (c, w)
-                                }
-                                "select_const_vec" => {
-                                    let c = circuits::select_const_vec(&[0, 1, 2, 3, 0, 5]);
-                                    let w = vec![4];
-                                    (c, w)
-                                }
-                                "encode4" => {
-                                    let c = circuits::encode4(1 + 2 + 8);
-                                    let w = vec![1, 1, 0, 1];
-                                    (c, w)
-                                }
-                                "decode32" => {
-                                    let c = circuits::decode32();
-                                    let w = vec![0];
-                                    (c, w)
-                                }
-                                "w_all_eq_but_one" => {
-                                    let c = circuits::check_all_eq_but_one();
-                                    let w = vec![1, 43, 43, 2, 3];
-                                    (c, w)
-                                }
-                                "decode32_128_bit" => {
-                                    let c = circuits::add_decode32();
-                                    let w = vec![1 << 31, 1 << 31];
-                                    (c, w)
-                                }
-                                "add" => {
-                                    let arg = arg.unwrap();
-                                    let mut arg = arg.split(',');
-                                    let x = arg.next().unwrap().parse::<u32>().unwrap();
-                                    let y = arg.next().unwrap().parse::<u32>().unwrap();
-                                    let c = circuits::add();
-                                    let w = vec![x, y];
-                                    (c, w)
-                                }
-                                _ => {
-                                    println!("don't understand: {}", circuit);
-                                    exit(1);
-                                }
-                            }
+                            test_circuit(circuit.as_str(), arg)
                         } else {
-                            println!(
-                                "err: want a) prog and
-                                time-bound or b) circuit "
-                            );
+                            println!("err: want a) prog and time-bound or b) circuit ");
                             exit(1);
                         };
-                        match party.as_ref() {
-                            "prover" => {
-                                print_circuit_stats(&c);
-                                run_p(port.unwrap(), port_vole.unwrap(), c, w, ctx)
-                            }
-                            "verifier" => run_v(port.unwrap(), port_vole.unwrap(), c, ctx),
-                            _ => panic!("unreachable"),
-                        }
+                        print_circuit_stats(&c);
+                        run_p(port.unwrap(), port_vole.unwrap(), c, w, ctx)
+                    }
+                    "verifier" => {
+                        assert!(port_vole.is_some());
+                        let c = if prog.is_some() & t.is_some() {
+                            let prog = prog.unwrap();
+                            let arg = arg.unwrap();
+                            let t = t.unwrap();
+                            let prog = test_prog(prog.as_str(), arg.as_str(), party.as_str()).0;
+                            ctx.start_time("generate circuit");
+                            let c = generate_circuit(&prog, t);
+                            ctx.stop_time();
+                            c
+                        } else if let Some(circuit) = circuit {
+                            test_circuit(circuit.as_str(), arg).0
+                        } else {
+                            println!("err: want a) prog and time-bound or b) circuit ");
+                            exit(1);
+                        };
+                        run_v(port.unwrap(), port_vole.unwrap(), c, ctx)
                     }
                     "vole" => run_vole(port.unwrap(), ctx),
                     _ => {
@@ -263,6 +152,147 @@ fn main() {
             exit(1);
         }
     };
+}
+
+fn test_prog(prog: &str, arg: &str, party: &str) -> (Prog, Vec<Word>) {
+    match prog {
+        "mul_eq" => {
+            let prog = programs::mul_eq();
+            let args = vec![2, 2, 4];
+            (prog, args)
+        }
+        "const0" => {
+            let prog = programs::const_0();
+            let args = vec![];
+            (prog, args)
+        }
+        "shr" => {
+            let prog = programs::shr();
+            let args = vec![];
+            (prog, args)
+        }
+        "rotr" => {
+            let prog = programs::rotr();
+            let args = vec![];
+            (prog, args)
+        }
+        "overflowing_add" => {
+            let prog = programs::overflowing_add();
+            let args = vec![];
+            (prog, args)
+        }
+        "verify_compress" => {
+            let (mac, witness) = match party {
+                "prover" => {
+                    let mut arg = arg.split(',');
+                    let msg = arg.next().unwrap();
+                    let mac = arg.next().unwrap();
+                    let msg_ = sha256::pad(msg);
+                    (mac, Vec::from(msg_))
+                }
+                "verifier" => (arg, vec![]),
+                _ => {
+                    panic!("unreachable")
+                }
+            };
+            let mac = sha256::parse_mac(mac);
+            let prog = programs::verify_compress(mac);
+            (prog, witness)
+        }
+
+        _ => {
+            println!("don't understand: {}", prog);
+            exit(1);
+        }
+    }
+}
+
+fn test_circuit(circuit: &str, arg: Option<String>) -> (Circuit<u32>, Vec<u32>) {
+    match circuit {
+        "add_eq_42" => {
+            let c = circuits::add_eq_42();
+            let w = vec![21, 21];
+            (c, w)
+        }
+        "add_eq" => {
+            let c = circuits::add_eq();
+            let w = vec![21, 21, 42];
+            (c, w)
+        }
+        "mul_eq" => {
+            let c = circuits::mul_eq();
+            let w = vec![2, 2, 4];
+            (c, w)
+        }
+        "mul_const" => {
+            let c = circuits::mul_const();
+            let w = vec![42, 42 * 42];
+            (c, w)
+        }
+        "mul_mul_eq" => {
+            let c = circuits::mul_mul_eq();
+            let w = vec![2, 2, 7, 28];
+            (c, w)
+        }
+        "pow_eq" => {
+            let c = circuits::pow();
+            let w = vec![2, 3, 8];
+            (c, w)
+        }
+        "select_eq" => {
+            let c = circuits::select_eq();
+            let w = vec![0, 0, 1];
+            (c, w)
+        }
+        "select_eq2" => {
+            let c = circuits::select_eq2();
+            let w = vec![2, 1337, 1, 0, 42];
+            (c, w)
+        }
+        "select_const" => {
+            let c = circuits::select_const(0, 1);
+            let w = vec![0];
+            (c, w)
+        }
+        "select_const_vec" => {
+            let c = circuits::select_const_vec(&[0, 1, 2, 3, 0, 5]);
+            let w = vec![4];
+            (c, w)
+        }
+        "encode4" => {
+            let c = circuits::encode4(1 + 2 + 8);
+            let w = vec![1, 1, 0, 1];
+            (c, w)
+        }
+        "decode32" => {
+            let c = circuits::decode32();
+            let w = vec![0];
+            (c, w)
+        }
+        "w_all_eq_but_one" => {
+            let c = circuits::check_all_eq_but_one();
+            let w = vec![1, 43, 43, 2, 3];
+            (c, w)
+        }
+        "decode32_128_bit" => {
+            let c = circuits::add_decode32();
+            let w = vec![1 << 31, 1 << 31];
+            (c, w)
+        }
+        "add" => {
+            let arg = arg.unwrap();
+            let mut arg = arg.split(',');
+            let x = arg.next().unwrap().parse::<u32>().unwrap();
+            let y = arg.next().unwrap().parse::<u32>().unwrap();
+            let c = circuits::add();
+            let w = vec![x, y];
+            (c, w)
+        }
+        _ => {
+            println!("don't understand: {}", circuit);
+            exit(1);
+        }
+    }
 }
 
 fn print_circuit_stats<T>(c: &Circuit<T>) {
