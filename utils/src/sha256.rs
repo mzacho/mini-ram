@@ -4,23 +4,40 @@ use zerocopy::transmute;
 ///
 /// x is assumed to have a max length (in bytes) of 55, so the
 /// actual compression of x will only use 1 round of hashing.
-pub fn pad(msg: &str) -> [u32; 16] {
-    assert!(msg.len() <= 55);
+pub fn pad(msg: &str) -> Vec<u32> {
+    // MiniRAM memory is 2^32 bits i.e 2^29 words
+    // 2^3 + 2^7 words used for consts in SHA256, i.e they must also
+    // fit in memory
+    let n_blocks = if msg.len() >= usize::pow(2, 29) - usize::pow(2, 3) - usize::pow(2, 7) {
+        panic!("msg too long")
+    } else {
+        // last 8 bytes reserved to encode msg length
+        //      1 byte reserverd to prepend 1 to msg
+        usize::max(1, (msg.len() + 9).div_ceil(64))
+    };
+
     let l = msg.len();
-    let mut bytes = [0u8; 64];
+    let mut bytes = vec![0u8; 64 * n_blocks];
     for (i, b) in msg.as_bytes().iter().enumerate() {
         bytes[i] = *b;
     }
     bytes[l] = 0x80; // add 1 to the end of the string
+
     let l = l * 8;
     let l: [u8; 8] = u64::try_from(l).unwrap().to_be_bytes();
+    let last_block = n_blocks * 64 - 8;
     for (i, b) in l.iter().enumerate() {
-        bytes[56 + i] = *b;
+        bytes[last_block + i] = *b;
     }
-    let ints: [u32; 16] = transmute!(bytes);
-    let mut res = [0; 16];
-    for (i, x) in ints.iter().enumerate() {
-        res[i] = u32::from_be(*x);
+    let mut res = vec![0u32; n_blocks * 16];
+    for i in 0..n_blocks * 16 {
+        let block = [
+            bytes[i * 4],
+            bytes[i * 4 + 1],
+            bytes[i * 4 + 2],
+            bytes[i * 4 + 3],
+        ];
+        res[i] = u32::from_be(transmute!(block));
     }
     res
 }

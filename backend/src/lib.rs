@@ -16,7 +16,6 @@ pub mod quicksilver;
 pub struct ProofCtx {
     rng: StdRng,
     instants: Vec<Instant>,
-    msgs: Vec<&'static str>,
     indent: usize,
 }
 
@@ -32,7 +31,6 @@ impl ProofCtx {
             rng,
             instants,
             indent: 0,
-            msgs: vec![],
         }
     }
 
@@ -41,7 +39,6 @@ impl ProofCtx {
             rng: StdRng::from_rng(rand::thread_rng()).unwrap(),
             instants: vec![Instant::now()],
             indent: 0,
-            msgs: vec![],
         }
     }
 
@@ -63,22 +60,23 @@ impl ProofCtx {
     }
 
     /// Starts a new timer.
+    #[inline]
     pub fn start_time(&mut self, msg: &'static str) {
         self.instants.push(Instant::now());
-        self.msgs.push(msg);
+        let indent = indent(&self.indent);
+        print!("  [bench] {indent}{msg}:... ");
         self.indent += 1;
     }
 
     /// Stops last timer. Returns current time if no timer is
     /// running.
+    #[inline]
     pub fn stop_time(&mut self) {
         let now = Instant::now();
         if let Some(last_time) = self.instants.pop() {
-            let msg = self.msgs.pop().unwrap();
             let d = now.duration_since(last_time).as_millis();
+            println!("{d}ms");
             self.indent -= 1;
-            let indent = indent(&self.indent);
-            println!("  [bench] {indent}{msg}: {d}ms");
         } else {
             println!(
                 "  [bench] WARNING: stop_time called without

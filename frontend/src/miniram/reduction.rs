@@ -21,7 +21,7 @@ type Witness = Vec<Word>;
 /// i.e a Vec<LocalState> that is as long as the time bound t
 pub fn encode_witness(prog: &Prog, args: Vec<Word>, t: usize, ctx: &mut ProofCtx) -> Res<Witness> {
     ctx.start_time("interpret program");
-    let (res, mut lsts) = interpret(prog, args, t)?;
+    let (res, mut lsts) = interpret(prog, args, Some(t))?;
     ctx.stop_time();
     assert_eq!(res, 0);
     if lsts.len() < t {

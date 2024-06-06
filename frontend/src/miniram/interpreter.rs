@@ -103,12 +103,17 @@ pub enum MemAccess {
     Write { addr: Word, val: Word },
 }
 
-/// Executes prog on args for maximum t steps.
+/// Executes prog on args for maximum t steps (or until interpreting
+/// a RET instruction, if t is None).
 ///
 /// Returns the result of evaluation, with all local states
 /// encountered during evaluation, or an error if the time bound t
 /// was exceeded.
-pub fn interpret(prog: &Prog, args: Vec<Word>, t: usize) -> Res<(Word, Vec<LocalStateAug>)> {
+pub fn interpret(
+    prog: &Prog,
+    args: Vec<Word>,
+    t: Option<usize>,
+) -> Res<(Word, Vec<LocalStateAug>)> {
     let mut mem = init_mem(args);
     let mut st = init_store();
     let mut cfl = init_cflags();
@@ -232,14 +237,16 @@ pub fn interpret(prog: &Prog, args: Vec<Word>, t: usize) -> Res<(Word, Vec<Local
             }
             Inst::Print(r) => {
                 let x = st[usize::from(r)];
-                println!("{:#08x}", x);
+                let x = format!("{:#10x}", x);
+                //let hex = x.strip_prefix("0x").unwrap();
+                print!("{}", x);
                 MemAccess::None
             }
         };
         inc_pc(&mut st);
         i = fetch(prog, st[pc])?;
         sts.push(record(&st, &cfl, ma, sts.len()));
-        if sts.len() >= t {
+        if t.is_some_and(|t| sts.len() >= t) {
             return Err("time bound exceeded");
         }
     };

@@ -372,19 +372,26 @@ pub fn rotr_8_0xb301() -> Prog {
         .build()
 }
 
+// 536870776 = 2^29 - 2^3 - 2^7
+// hashes: 8 words
+const ADR_H: u32 = 536870776;
+// consts: 64 words
+const ADR_K: u32 = 536870776 + 8;
+// working vars: 64 words
+const ADR_W: u32 = 536870776 + 8 + 64;
+
 /// Returns a program which takes an input x and verifies that
-/// compressing x with SHA256 (as described in FIPS 180-2) yields
+/// compressing x with SHA256 (as described in FIPS 180-4) yields
 /// the (hardcoded) mac.
-pub fn verify_compress(mac: [u32; 16]) -> Prog {
-    let adr_h = 64;
-    let mut b = build_compress(false);
+pub fn verify_compress(mac: [u32; 16], n_blocks: u32) -> Prog {
+    let mut b = build_compress(false, n_blocks);
 
     for i in 0..8 {
         b = b
             .mov_c(4, 0) // Register 4 holds the result
-            .mov_c(1, adr_h + i)
+            .mov_c(1, ADR_H + i)
             .ldr(2, 1)
-            .mov_c(3, mac[usize::try_from(i).unwrap()])
+            .mov_c(3, mac[i as usize])
             .sub(2, 2, 3)
             .or(4, 4, 2, 6)
     }
@@ -393,23 +400,17 @@ pub fn verify_compress(mac: [u32; 16]) -> Prog {
     b.ret_r(4).build()
 }
 
-pub fn compress(verbose: bool) -> Prog {
-    let b = build_compress(verbose);
+pub fn compress(verbose: bool, n_blocks: u32) -> Prog {
+    let b = build_compress(verbose, n_blocks);
     b.ret_c(0).build()
 }
 
 /// Returns a program which takes a 16 word input x and compresses x
 /// with SHA256.
 ///
-/// x is assumed to be padded (as described in FIPS 180-2).
-pub fn build_compress(verbose: bool) -> Builder {
+/// x is assumed to be padded (as described in FIPS 180-4).
+pub fn build_compress(verbose: bool, n_blocks: u32) -> Builder {
     let mut b_ = Builder::new();
-    // hashes: 8 words
-    let adr_h = 64;
-    // consts: 64 words
-    let adr_k = 72;
-    // working vars: 64 words
-    let adr_w = 136;
     // registers of local vars
     let a = 8;
     let b = 9;
@@ -422,46 +423,58 @@ pub fn build_compress(verbose: bool) -> Builder {
     // Registers for vars T1 and T2
     let t1 = 7;
     let t2 = 6;
+    // Register for address of next message block
+    let adr_m = 5;
+    b_ = b_.mov_c(adr_m, 0);
 
-    b_ = add_sha256_consts(b_, adr_h, adr_k);
+    // initialize consts
+    b_ = add_sha256_consts(b_, ADR_H, ADR_K);
+
+    // loop start:
+    let loop_head = 0x0000d9u32;
 
     // 1. Prepare message schedule W:
-    // Uses r1, r2, r3, r4, r5 and r6 as scratch registers
-    // todo: r6 is overwrites t1 if input is multiple blocks!
+    // Uses r1, r2, r3 and r4 as scratch registers
     for t in 0..64u32 {
+        b_ = b_.mov_c(3, 1); // const 1 in scratch register
         if t < 16 {
             // Wt = Mt
-            b_ = b_.mov_c(1, t).ldr(2, 1).mov_c(1, adr_w + t).strr(1, 2)
+            b_ = b_
+                .mov_r(1, adr_m)
+                .ldr(2, 1)
+                .mov_c(1, ADR_W + t)
+                .strr(1, 2)
+                .add(adr_m, adr_m, 3) // adr_m += 1
         } else {
             // Wt = s1(Wt-2) + Wt-7 + s0(Wt-15) + Wt-16
-            b_ = b_.mov_c(4, adr_w + t - 2).ldr(4, 4);
-            b_ = sha256_s1(b_, 4, 5);
-            b_ = b_.mov_c(4, adr_w + t - 15).ldr(4, 4);
-            b_ = sha256_s0(b_, 4, 6);
-            b_ = b_.mov_c(1, adr_w + t - 7).ldr(1, 1);
-            b_ = b_.mov_c(2, adr_w + t - 16).ldr(2, 2);
-            b_ = b_.add(2, 1, 2).add(2, 2, 5).add(2, 2, 6);
-            b_ = b_.mov_c(1, adr_w + t).strr(1, 2)
+            b_ = b_.mov_c(2, ADR_W + t - 2).ldr(2, 2);
+            b_ = sha256_s1(b_, 2, 3);
+            b_ = b_.mov_c(2, ADR_W + t - 15).ldr(2, 2);
+            b_ = sha256_s0(b_, 2, 4);
+            b_ = b_.mov_c(1, ADR_W + t - 7).ldr(1, 1);
+            b_ = b_.mov_c(2, ADR_W + t - 16).ldr(2, 2);
+            b_ = b_.add(2, 1, 2).add(2, 2, 3).add(2, 2, 4);
+            b_ = b_.mov_c(1, ADR_W + t).strr(1, 2)
         }
     }
 
     // 2. Initialize working vars
     b_ = b_
-        .mov_c(1, adr_h)
+        .mov_c(1, ADR_H)
         .ldr(a, 1)
-        .mov_c(1, adr_h + 1)
+        .mov_c(1, ADR_H + 1)
         .ldr(b, 1)
-        .mov_c(1, adr_h + 2)
+        .mov_c(1, ADR_H + 2)
         .ldr(c, 1)
-        .mov_c(1, adr_h + 3)
+        .mov_c(1, ADR_H + 3)
         .ldr(d, 1)
-        .mov_c(1, adr_h + 4)
+        .mov_c(1, ADR_H + 4)
         .ldr(e, 1)
-        .mov_c(1, adr_h + 5)
+        .mov_c(1, ADR_H + 5)
         .ldr(f, 1)
-        .mov_c(1, adr_h + 6)
+        .mov_c(1, ADR_H + 6)
         .ldr(g, 1)
-        .mov_c(1, adr_h + 7)
+        .mov_c(1, ADR_H + 7)
         .ldr(h, 1);
 
     // 3. For t = 0 to 63 ...
@@ -471,10 +484,10 @@ pub fn build_compress(verbose: bool) -> Builder {
         b_ = sha256_ch(b_, e, f, g, 2)
             .add(t1, t1, 2)
             .add(t1, t1, h)
-            .mov_c(1, adr_k + t)
+            .mov_c(1, ADR_K + t)
             .ldr(1, 1)
             .add(t1, t1, 1)
-            .mov_c(1, adr_w + t)
+            .mov_c(1, ADR_W + t)
             .ldr(1, 1)
             .add(t1, t1, 1);
         // update t2
@@ -494,40 +507,83 @@ pub fn build_compress(verbose: bool) -> Builder {
             .mov_r(a, 1)
     }
 
-    // 4. Update hashes and print them
-    b_ = b_.mov_c(1, adr_h).ldr(2, 1).add(2, 2, a);
+    // 4. Update hashes
+    b_ = b_
+        .mov_c(1, ADR_H)
+        .ldr(2, 1)
+        .add(2, 2, a)
+        .strr(1, 2)
+        .mov_c(1, ADR_H + 1)
+        .ldr(2, 1)
+        .add(2, 2, b)
+        .strr(1, 2)
+        .mov_c(1, ADR_H + 2)
+        .ldr(2, 1)
+        .add(2, 2, c)
+        .strr(1, 2)
+        .mov_c(1, ADR_H + 3)
+        .ldr(2, 1)
+        .add(2, 2, d)
+        .strr(1, 2)
+        .mov_c(1, ADR_H + 4)
+        .ldr(2, 1)
+        .add(2, 2, e)
+        .strr(1, 2)
+        .mov_c(1, ADR_H + 5)
+        .ldr(2, 1)
+        .add(2, 2, f)
+        .strr(1, 2)
+        .mov_c(1, ADR_H + 6)
+        .ldr(2, 1)
+        .add(2, 2, g)
+        .strr(1, 2)
+        .mov_c(1, ADR_H + 7)
+        .ldr(2, 1)
+        .add(2, 2, h)
+        .strr(1, 2);
+
+    let loop_done = 0x000f30;
+
+    // check if done:
+    b_ = b_
+        .mov_c(1, loop_done)
+        .mov_c(2, n_blocks)
+        .mov_r(3, adr_m)
+        .sub(2, 2, 3)
+        .b_z(1)
+        .mov_c(1, loop_head)
+        .b(1);
+
+    // loop_done <--- here
+    // b_ = b_.print(0);
+
+    // 4. Print resulting hashes
     if verbose {
-        b_ = b_.print(2);
-    };
-    b_ = b_.strr(1, 2).mov_c(1, adr_h + 1).ldr(2, 1).add(2, 2, b);
-    if verbose {
-        b_ = b_.print(2);
-    };
-    b_ = b_.strr(1, 2).mov_c(1, adr_h + 2).ldr(2, 1).add(2, 2, c);
-    if verbose {
-        b_ = b_.print(2);
-    };
-    b_ = b_.strr(1, 2).mov_c(1, adr_h + 3).ldr(2, 1).add(2, 2, d);
-    if verbose {
-        b_ = b_.print(2);
-    };
-    b_ = b_.strr(1, 2).mov_c(1, adr_h + 4).ldr(2, 1).add(2, 2, e);
-    if verbose {
-        b_ = b_.print(2);
-    };
-    b_ = b_.strr(1, 2).mov_c(1, adr_h + 5).ldr(2, 1).add(2, 2, f);
-    if verbose {
-        b_ = b_.print(2);
-    };
-    b_ = b_.strr(1, 2).mov_c(1, adr_h + 6).ldr(2, 1).add(2, 2, g);
-    if verbose {
-        b_ = b_.print(2);
-    };
-    b_ = b_.strr(1, 2).mov_c(1, adr_h + 7).ldr(2, 1).add(2, 2, h);
-    if verbose {
-        b_ = b_.print(2);
-    };
-    b_ = b_.strr(1, 2);
+    b_ = b_.mov_c(1, ADR_H)
+        .ldr(2, 1)
+        .print(2)
+        .mov_c(1, ADR_H + 1)
+        .ldr(2, 1)
+        .print(2)
+        .mov_c(1, ADR_H + 2)
+        .ldr(2, 1)
+        .print(2)
+        .mov_c(1, ADR_H + 3)
+        .ldr(2, 1)
+        .print(2)
+        .mov_c(1, ADR_H + 4)
+        .ldr(2, 1)
+        .print(2)
+        .mov_c(1, ADR_H + 5)
+        .ldr(2, 1)
+        .print(2)
+        .mov_c(1, ADR_H + 6)
+        .ldr(2, 1)
+        .print(2)
+        .mov_c(1, ADR_H + 7)
+        .ldr(2, 1)
+            .print(2)
+    }
     b_
 }
 
@@ -557,23 +613,27 @@ fn add_sha256_consts(mut b: Builder, mut adr_h: u32, mut adr_k: u32) -> Builder 
 }
 
 // Computes s0(x) = ROTR_7(x) + ROTR_18(x) + SHR_3(x)
-// Uses r1, r2, r3 as caller-save registers
+// Puts result in dst, uses r1 as scratch register
 fn sha256_s0(b: Builder, x: Reg, dst: Reg) -> Builder {
-    b.rotr(1, 7, x)
-        .rotr(2, 18, x)
-        .shr(3, 3, x)
-        .xor(dst, 1, 2)
-        .xor(dst, dst, 3)
+    assert_ne!(dst, x);
+    assert_ne!(x, 1);
+    b.rotr(dst, 7, x)
+        .rotr(1, 18, x)
+        .xor(dst, dst, 1)
+        .shr(1, 3, x)
+        .xor(dst, dst, 1)
 }
 
 // Computes s1(x) = ROTR_17(x) + ROTR_19(x) + SHR_10(x)
-// Uses r1, r2, r3 as caller-save registers
+// Puts result in dst, uses r1 as scratch register
 fn sha256_s1(b: Builder, x: Reg, dst: Reg) -> Builder {
-    b.rotr(1, 17, x)
-        .rotr(2, 19, x)
-        .shr(3, 10, x)
-        .xor(dst, 1, 2)
-        .xor(dst, dst, 3)
+    assert_ne!(dst, x);
+    assert_ne!(x, 1);
+    b.rotr(dst, 17, x)
+        .rotr(1, 19, x)
+        .xor(dst, dst, 1)
+        .shr(1, 10, x)
+        .xor(dst, dst, 1)
 }
 
 // Computes sigma0(x) = ROTR_2(x) + ROTR_13(x) + ROTR_22(x)
@@ -616,7 +676,7 @@ fn sha256_maj(b: Builder, x: Reg, y: Reg, z: Reg, dst: Reg) -> Builder {
 #[cfg(test)]
 fn test_mul() {
     use crate::miniram::interpreter::interpret;
-    let time_bound = 10000;
+    let time_bound = Some(10000);
     let p = &mul();
     let args = vec![3, 4];
     let res = interpret(p, args, time_bound);
@@ -631,7 +691,7 @@ fn test_mul() {
 #[cfg(test)]
 fn test_mul_eq() {
     use crate::miniram::interpreter::interpret;
-    let time_bound = 1000;
+    let time_bound = Some(1000);
     let p = &mul_eq();
     let args = vec![3, 4, 12];
     let res = interpret(p, args, time_bound);

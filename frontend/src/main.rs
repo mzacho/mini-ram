@@ -74,9 +74,7 @@ fn main() {
                             let t = t.unwrap();
                             let (prog, args) =
                                 test_prog(prog.as_str(), arg.as_str(), party.as_str());
-                            ctx.start_time("encode witness");
                             let w = encode_witness(&prog, args, t, &mut ctx).unwrap(); // todo: handle?
-                            ctx.stop_time();
                             ctx.start_time("generate circuit");
                             let c = generate_circuit(&prog, t);
                             ctx.stop_time();
@@ -117,7 +115,6 @@ fn main() {
                 }
                 .unwrap();
             } else if let Some(prog) = run {
-                let time_bound = t.unwrap();
                 match prog.as_str() {
                     "verify_compress" => {
                         let arg = arg.unwrap();
@@ -126,18 +123,18 @@ fn main() {
                         let mac = arg.next().unwrap();
                         let msg_ = sha256::pad(msg);
                         let mac_ = sha256::parse_mac(mac);
-                        let prog = &verify_compress(mac_);
+                        let n_rounds = msg_.len() as u32;
+                        let prog = &verify_compress(mac_, n_rounds);
                         println!("Running (verify_compress({mac}))({msg}):");
-                        let (res, _) = interpret(prog, Vec::from(msg_), time_bound).unwrap();
+                        let (res, _) = interpret(prog, msg_, t).unwrap();
                         println!("res={res}");
                     }
                     "compress" => {
                         let arg = arg.unwrap();
-                        let prog = &compress(true);
-
                         let arg_ = sha256::pad(&arg);
+                        let prog = &compress(true, arg_.len() as u32);
                         println!("Running compress({arg}):");
-                        let (_, _) = interpret(prog, Vec::from(arg_), time_bound).unwrap();
+                        let (_, _) = interpret(prog, arg_, t).unwrap();
                         println!();
                     }
                     _ => todo!(),
@@ -182,21 +179,27 @@ fn test_prog(prog: &str, arg: &str, party: &str) -> (Prog, Vec<Word>) {
             (prog, args)
         }
         "verify_compress" => {
-            let (mac, witness) = match party {
+            let (mac, witness, n_rounds) = match party {
                 "prover" => {
                     let mut arg = arg.split(',');
                     let msg = arg.next().unwrap();
                     let mac = arg.next().unwrap();
                     let msg_ = sha256::pad(msg);
-                    (mac, Vec::from(msg_))
+                    let n_rounds = msg_.len() as u32;
+                    (mac, msg_, n_rounds)
                 }
-                "verifier" => (arg, vec![]),
+                "verifier" => {
+                    let mut arg = arg.split(',');
+                    let mac = arg.next().unwrap();
+                    let n_rounds = arg.next().unwrap();
+                    (mac, vec![], n_rounds.parse::<u32>().unwrap() * 16)
+                }
                 _ => {
                     panic!("unreachable")
                 }
             };
             let mac = sha256::parse_mac(mac);
-            let prog = programs::verify_compress(mac);
+            let prog = programs::verify_compress(mac, n_rounds);
             (prog, witness)
         }
 
@@ -300,6 +303,7 @@ fn print_circuit_stats<T>(c: &Circuit<T>) {
     let n_mul = c.n_mul;
     let n_gates = c.gates.len();
     let n_select = c.n_select_alt;
+    let n_select_const = c.n_select_const_alt;
     let n_decode32 = c.n_decode32;
     let n_check_all = c.n_check_all_eq_pairs;
     let n_consts = c.consts.len();
@@ -308,7 +312,8 @@ fn print_circuit_stats<T>(c: &Circuit<T>) {
     println!("  number of inputs         : {n_in}");
     println!("  number of gates          : {n_gates}");
     println!("    - multiplication       : {n_mul}");
-    println!("    - selects alts.        : {n_select}");
+    println!("    - select alts.         : {n_select}");
+    println!("    - select_const alts.   : {n_select_const}");
     println!("    - decode32             : {n_decode32}");
     println!("    - check all eq but one : {n_check_all}");
     println!("    - outputs              : {n_out}");
