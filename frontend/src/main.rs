@@ -70,10 +70,9 @@ fn main() {
                         assert!(port_vole.is_some());
                         let (c, w) = if prog.is_some() & t.is_some() {
                             let prog = prog.unwrap();
-                            let arg = arg.unwrap();
                             let t = t.unwrap();
                             let (prog, args) =
-                                test_prog(prog.as_str(), arg.as_str(), party.as_str());
+                                test_prog(prog.as_str(), arg, party.as_str());
                             let w = encode_witness(&prog, args, t, &mut ctx).unwrap(); // todo: handle?
                             ctx.start_time("generate circuit");
                             let c = generate_circuit(&prog, t);
@@ -92,9 +91,8 @@ fn main() {
                         assert!(port_vole.is_some());
                         let c = if prog.is_some() & t.is_some() {
                             let prog = prog.unwrap();
-                            let arg = arg.unwrap();
                             let t = t.unwrap();
-                            let prog = test_prog(prog.as_str(), arg.as_str(), party.as_str()).0;
+                            let prog = test_prog(prog.as_str(), arg, party.as_str()).0;
                             ctx.start_time("generate circuit");
                             let c = generate_circuit(&prog, t);
                             ctx.stop_time();
@@ -151,7 +149,7 @@ fn main() {
     };
 }
 
-fn test_prog(prog: &str, arg: &str, party: &str) -> (Prog, Vec<Word>) {
+fn test_prog(prog: &str, arg: Option<String>, party: &str) -> (Prog, Vec<Word>) {
     match prog {
         "mul_eq" => {
             let prog = programs::mul_eq();
@@ -181,16 +179,18 @@ fn test_prog(prog: &str, arg: &str, party: &str) -> (Prog, Vec<Word>) {
         "verify_compress" => {
             let (mac, witness, n_rounds) = match party {
                 "prover" => {
+                    let arg = arg.unwrap();
                     let mut arg = arg.split(',');
-                    let msg = arg.next().unwrap();
-                    let mac = arg.next().unwrap();
-                    let msg_ = sha256::pad(msg);
+                    let msg = arg.next().unwrap().to_string();
+                    let mac = arg.next().unwrap().to_string();
+                    let msg_ = sha256::pad(&msg);
                     let n_rounds = msg_.len() as u32;
                     (mac, msg_, n_rounds)
                 }
                 "verifier" => {
+                    let arg = arg.unwrap();
                     let mut arg = arg.split(',');
-                    let mac = arg.next().unwrap();
+                    let mac = arg.next().unwrap().to_string();
                     let n_rounds = arg.next().unwrap();
                     (mac, vec![], n_rounds.parse::<u32>().unwrap() * 16)
                 }
@@ -198,7 +198,7 @@ fn test_prog(prog: &str, arg: &str, party: &str) -> (Prog, Vec<Word>) {
                     panic!("unreachable")
                 }
             };
-            let mac = sha256::parse_mac(mac);
+            let mac = sha256::parse_mac(&mac);
             let prog = programs::verify_compress(mac, n_rounds);
             (prog, witness)
         }

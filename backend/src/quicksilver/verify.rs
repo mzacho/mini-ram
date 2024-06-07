@@ -10,7 +10,6 @@ pub fn verify32(c: Circuit<u32>, mut chan: VerifierTcpChannel, mut ctx: ProofCtx
         || (c.n_select_const_alt > 0)
         || (c.n_decode32 > 0)
         || (c.n_check_all_eq_pairs > 0);
-    let n_openings = c.n_out + c.n_decode32;
 
     #[rustfmt::skip]
     let segments = &vole::Segments {
@@ -21,11 +20,7 @@ pub fn verify32(c: Circuit<u32>, mut chan: VerifierTcpChannel, mut ctx: ProofCtx
             + c.n_decode32 * 32
             + c.n_check_all_eq_pairs,
         n_mul_check: if check_mul { 1 } else { 0 },
-        n_openings: c.n_out
-            + c.n_decode32
-            + c.n_select
-            + c.n_select_const
-            + c.n_check_all_eq
+        n_openings: 0
     };
 
     ctx.start_time("preprocess vole");
@@ -61,8 +56,7 @@ pub fn verify32(c: Circuit<u32>, mut chan: VerifierTcpChannel, mut ctx: ProofCtx
     };
 
     ctx.start_time("evaluating circuit");
-    let (w, keys) = eval(&c, wires, delta, x, vole.ks_mul, &mut chan);
-    let n = keys.len();
+    let w = eval(&c, wires, delta, x, vole.ks_mul, &mut chan);
     ctx.stop_time();
 
     if check_mul {
@@ -72,23 +66,6 @@ pub fn verify32(c: Circuit<u32>, mut chan: VerifierTcpChannel, mut ctx: ProofCtx
         let uv = u.wrapping_sub(v.wrapping_mul(delta));
         assert_eq!(w.wrapping_add(vole.ks_mul_check[0]), uv);
     }
-
-    println!("Receiving openings (macs) of {n} output values.");
-    ctx.start_time("openings");
-    for (i, kx) in keys.into_iter().enumerate() {
-        let z = chan.recv_val();
-        let tz = chan.recv_mac();
-        let kr = vole.ks_openings[i];
-
-        assert_eq!(
-            tz,
-            delta
-                .wrapping_mul(z)
-                .wrapping_add(kx)
-                .wrapping_add(kr.wrapping_mul(1 << 32))
-        );
-    }
-    ctx.stop_time();
 
     println!("Verifier accepts, exiting.");
 }
@@ -109,12 +86,11 @@ fn eval(
     challenge: u128,
     mul_keys: Vec<u128>,
     chan: &mut VerifierTcpChannel,
-) -> (W, Vec<Key>) {
+) -> W {
     let gates = &c.gates;
     let consts = &c.consts;
     let n_gates = c.n_gates;
 
-    let mut outputs = vec![];
     let mut w: Key = 0;
 
     let mut i = 0; // ctr gate
@@ -238,7 +214,10 @@ fn eval(
                     }
                 }
                 // Assert that sum bjs opens to 1
-                outputs.push(kbs.wrapping_add(delta))
+                let b =
+                    0u128.wrapping_sub(kbs.wrapping_mul(delta)).wrapping_sub(delta.wrapping_mul(delta));
+
+                w = w.wrapping_add(b);
             }
             OP_SELECT_CONST => {
                 // args: idi, idc1, idc2, ..., idcn where i <= n
@@ -270,7 +249,10 @@ fn eval(
                     }
                 }
                 // Assert that sum bjs opens to 1
-                outputs.push(kbs.wrapping_add(delta))
+                let b =
+                    0u128.wrapping_sub(kbs.wrapping_mul(delta)).wrapping_sub(delta.wrapping_mul(delta));
+
+                w = w.wrapping_add(b);
             }
             OP_DECODE32 => {
                 // args: x where x < 2^32
@@ -296,7 +278,10 @@ fn eval(
                     }
                 }
                 // Verify x - sum opens to 0
-                outputs.push(kx.wrapping_sub(sum));
+                //outputs.push(kx.wrapping_sub(sum));
+                let b = 0u128.wrapping_sub(kx.wrapping_sub(sum).wrapping_mul(delta));
+                w = w.wrapping_add(b);
+
                 i += 1;
             }
             OP_DECODE64 => {
@@ -382,7 +367,9 @@ fn eval(
                 // outw: none
                 // out: x
                 let key = wires.zm[gates[i] - ARG0];
-                outputs.push(key);
+                // outputs.push(key);
+                let b = 0u128.wrapping_sub(key.wrapping_mul(delta));
+                w = w.wrapping_add(b);
                 i += 1;
             }
             // --- verificatin ops
@@ -425,7 +412,11 @@ fn eval(
                     }
                 }
                 // Verify sum - n-1 opens to 0
-                outputs.push(sum.wrapping_add(delta.wrapping_mul(j - 1)));
+                // outputs.push(sum.wrapping_add(delta.wrapping_mul(j - 1)));
+                let b =
+                    0u128.wrapping_sub(sum.wrapping_add(delta.wrapping_mul(j
+                                                                           - 1)).wrapping_mul(delta));
+                    w = w.wrapping_add(b);
             }
             OP_DEBUG => {
                 let msg = gates[i] - ARG0;
@@ -445,7 +436,7 @@ fn eval(
         }
         // dbg!(&wires);
     }
-    (w, outputs)
+    w
 }
 
 fn preprocess_vole(

@@ -11,7 +11,6 @@ pub fn prove32(c: Circuit<u32>, w: Vec<u32>, mut chan: ProverTcpChannel, mut ctx
         || (c.n_select_const_alt > 0)
         || (c.n_decode32 > 0)
         || (c.n_check_all_eq_pairs > 0);
-    let n_openings = c.n_out + c.n_decode32;
 
     #[rustfmt::skip]
     let segments = &vole::Segments {
@@ -22,11 +21,7 @@ pub fn prove32(c: Circuit<u32>, w: Vec<u32>, mut chan: ProverTcpChannel, mut ctx
             + c.n_decode32 * 32
             + c.n_check_all_eq_pairs,
         n_mul_check: if check_mul { 1 } else { 0 },
-        n_openings: c.n_out
-            + c.n_decode32
-            + c.n_select
-            + c.n_select_const
-            + c.n_check_all_eq
+        n_openings: 0,
     };
 
     ctx.start_time("preprocess vole");
@@ -45,7 +40,7 @@ pub fn prove32(c: Circuit<u32>, w: Vec<u32>, mut chan: ProverTcpChannel, mut ctx
         macs: voles.mc_in,
     };
     ctx.start_time("evaluating circuit");
-    let (outputs, mult_checks) = eval(&c, wires, voles.xs_mul, voles.mc_mul, &mut chan);
+    let mult_checks = eval(&c, wires, voles.xs_mul, voles.mc_mul, &mut chan);
     ctx.stop_time();
 
     if check_mul {
@@ -63,21 +58,6 @@ pub fn prove32(c: Circuit<u32>, w: Vec<u32>, mut chan: ProverTcpChannel, mut ctx
         chan.send_u(u);
         chan.send_v(v);
     }
-
-    ctx.start_time("sending openings");
-    for (i, (x, tx)) in outputs.iter().enumerate() {
-        // Assert that prover is honest
-        assert_eq!(x % (1 << 32), 0);
-        // Mask upper 96 bits of x by opening x + r * 2^32
-        let r = voles.xs_openings[i];
-        let tr = voles.mc_openings[i];
-        let z = x.wrapping_add(r.wrapping_mul(1 << 32));
-        let tz = tx.wrapping_add(tr.wrapping_mul(1 << 32));
-
-        chan.send_val(z);
-        chan.send_mac(tz);
-    }
-    ctx.stop_time();
 
     println!("Done, exiting.");
 }
@@ -146,7 +126,6 @@ fn preprocess_vole(chan: &mut ProverTcpChannel, segs: &vole::Segments) -> vole::
     }
 }
 
-type ValWithMac = (u128, u128);
 type A0A1 = (u128, u128);
 
 struct Wires {
@@ -164,7 +143,7 @@ fn eval(
     xs_mul: Vec<u128>,
     mc_mul: Vec<u128>,
     chan: &mut ProverTcpChannel,
-) -> (Vec<ValWithMac>, Vec<A0A1>) {
+) -> Vec<A0A1> {
     let gates = &c.gates;
     let consts = &c.consts;
     let n_gates = c.n_gates;
@@ -179,7 +158,6 @@ fn eval(
     //assert_eq!(c.n_mul, mc_mul.len());
     assert_eq!(n_gates, count_ops(gates));
 
-    let mut out = vec![];
     let mut a0a1 = vec![];
 
     let mut i = 0; // ctr gate
@@ -342,7 +320,7 @@ fn eval(
                     }
                 }
                 // Prove that sum of bs opens to 1
-                out.push((bs.wrapping_sub(1), bst));
+                a0a1.push((0,bst));
             }
             OP_SELECT_CONST => {
                 // args: idi, idc1, idc2, ..., idcn where i <= n
@@ -391,7 +369,7 @@ fn eval(
                     }
                 }
                 // Prove that sum of bs opens to 1
-                out.push((bs.wrapping_sub(1), bst));
+                a0a1.push((0,bst));
             }
             OP_DECODE32 => {
                 // args: x' where x' < 2^128
@@ -432,7 +410,10 @@ fn eval(
                     }
                 }
                 // Prove pow sum opens to x
-                out.push((x_init.wrapping_sub(sum), tx_.wrapping_sub(tsum)));
+                //out.push((x_init.wrapping_sub(sum), tx_.wrapping_sub(tsum)));
+                let a1 = tx_.wrapping_sub(tsum);
+                a0a1.push((0,a1));
+
                 i += 1;
             }
             OP_ENCODE4 => {
@@ -531,7 +512,8 @@ fn eval(
                 // out: x
                 let x = wires.clear[gates[i] - ARG0];
                 let t = wires.macs[gates[i] - ARG0];
-                out.push((x, t));
+                assert_eq!(x & 0xFFFFFFFF, 0);
+                a0a1.push((0, t));
                 i += 1;
             }
             // --- verificatin ops
@@ -589,7 +571,8 @@ fn eval(
                     }
                 }
                 // Prove that sum{j=1,..,n} bj = n-1
-                out.push((sum.wrapping_sub(j - 1), tsum));
+                // out.push((sum.wrapping_sub(j - 1), tsum));
+                a0a1.push((0,tsum));
             }
             OP_DEBUG => {
                 let msg = gates[i] - ARG0;
@@ -611,7 +594,7 @@ fn eval(
         // dbg!(&wires);
     }
     //pp::print(c, Some(&clr_w));
-    (out, a0a1)
+    a0a1
 }
 
 /// Counts number of gates
