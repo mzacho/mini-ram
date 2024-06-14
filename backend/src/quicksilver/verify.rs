@@ -197,6 +197,9 @@ fn eval(
                     let b = kbj.wrapping_mul(ki.wrapping_sub(kj));
                     // let tmp = tmp * x.pow(t)
                     w = w.wrapping_add(b);
+                    // Verify bj*(bj-1) = 0
+                    let b = kbj.wrapping_mul(kbj.wrapping_add(delta));
+                    w = w.wrapping_add(b);
                     // Verify sharing of bj*xj is consistent
                     let b = kbj
                         .wrapping_mul(kxj)
@@ -237,6 +240,9 @@ fn eval(
                     // Verify bj*(i-j) = 0
                     let b = kbj.wrapping_mul(ki.wrapping_sub(kj));
                     // let tmp = tmp * x.pow(t)
+                    w = w.wrapping_add(b);
+                    // Verify bj*(bj-1) = 0
+                    let b = kbj.wrapping_mul(kbj.wrapping_add(delta));
                     w = w.wrapping_add(b);
 
                     res = res.wrapping_add(kcjbj);
@@ -400,6 +406,9 @@ fn eval(
                     // Verify that bj*(xj-yj) opens to 0
                     let b = kbj.wrapping_mul(kxj.wrapping_sub(kyj));
                     // let tmp = tmp * x.pow(t)
+                    w = w.wrapping_add(b);
+                    // Verify bj*(bj-1) = 0
+                    let b = kbj.wrapping_mul(kbj.wrapping_add(delta));
                     w = w.wrapping_add(b);
 
                     sum = sum.wrapping_add(kbj);

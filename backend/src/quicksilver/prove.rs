@@ -302,6 +302,12 @@ fn eval(
                         .wrapping_mul(i_.wrapping_sub(j))
                         .wrapping_add(it.wrapping_mul(bj));
                     a0a1.push((a0, a1));
+                    // Prove bj(b_j-1) opens to 0
+                    let a0 = bjt.wrapping_mul(bjt);
+                    let a1 = bjt
+                        .wrapping_mul(bj.wrapping_sub(1))
+                        .wrapping_add(bjt.wrapping_mul(bj));
+                    a0a1.push((a0, a1));
 
                     // Prove sharing of bj*xj is consistent
                     let a0 = bjt.wrapping_mul(xjt);
@@ -358,6 +364,12 @@ fn eval(
                     let a1 = bjt
                         .wrapping_mul(i_.wrapping_sub(j))
                         .wrapping_add(it.wrapping_mul(bj));
+                    a0a1.push((a0, a1));
+                    // Prove bj(b_j-1) opens to 0
+                    let a0 = bjt.wrapping_mul(bjt);
+                    let a1 = bjt
+                        .wrapping_mul(bj.wrapping_sub(1))
+                        .wrapping_add(bjt.wrapping_mul(bj));
                     a0a1.push((a0, a1));
 
                     iu = iu.wrapping_sub(1);
@@ -560,6 +572,13 @@ fn eval(
                     let a1 = bjt
                         .wrapping_mul(xj.wrapping_sub(yj))
                         .wrapping_add((xjt.wrapping_sub(yjt)).wrapping_mul(bj));
+                    a0a1.push((a0, a1));
+
+                    // Prove bj(b_j-1) opens to 0
+                    let a0 = bjt.wrapping_mul(bjt);
+                    let a1 = bjt
+                        .wrapping_mul(bj.wrapping_sub(1))
+                        .wrapping_add(bjt.wrapping_mul(bj));
                     a0a1.push((a0, a1));
 
                     iu = iu.wrapping_sub(1);
